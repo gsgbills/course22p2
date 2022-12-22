@@ -1,0 +1,484 @@
+Lesson 17
+We're going to try to get fashion MNIST training to accuracy of 90%+ 
+(not bad if we look at papers with code).
+90% accuracy, below 10% error.. 3-4% error is SOTA. 
+Without using any architectural changes, no resNets, etc.
+
+A simple model, first convolution is taking a 9x9 one channel input,
+so we should compress it a bit.
+Made it 8 channels output for the convolution and then doubled it to 16, 
+doubled it to 32, doubled it to 64. 
+That's going to get to a 14x14 image, 7x7, 4x4, 2x2 and then 1x1.
+So we get the 10 digits.
+No thought at all behind this architecture, just pure convolutional.
+Flattened at the end is necessary to get rid of the unit axes that we end up with.
+
+Let's do a learning rate finder on this very simple model.
+This model is so bad that when I tried to use the LRfinder in the usual way 
+it looks ridiculous, impossible to see what's going on...
+We added a multiplier LRmulch or (gamma is what they call it in Pytorch) calling it gamma.
+We dialed it down to make it much more gradual, and only then manage to get the LRfinder 
+to tell us anything useful.
+
+Tried using a learning rate of 0.2, after trying other values .2 seems about the highest
+we can get up even this actually is too high. 
+I found a bit much lower and it didn't train much.
+It starts training and then we lose it. 
+In the colorful Dimension plot we get activations crashing, and we can see the key problem:
+We don't have zero mean standard deviation one layers at the start,
+so we certainly don't keep them throughout
+
+
+When we use Jupyter notebooks we can easily run out of GPU memory for 2 reasons:
+1. Jupyter notebook stores the results of previous few cell evaluations.  
+If we type _ it returns the last thing we evaluated,
+and we can do more _s to go backwards in time or we can
+use numbers to get the output of a cell, e.g., for cell 16 use _16. 
+If an output is a big CUDA tensor shown in a cell, Jupyter will keep that GPU memory.
+If we are running out of GPU memory we can clean all of those _s.
+JH found a function that nearly does that in the IPython source code, 
+so copied the important bits to clean_IPython_history 
+
+
+2. If we have a Cuda error or exception, then the exception object is stored by Python.
+Any tensors that were allocated in that traceback will stay allocated.
+JH created a clean_tb function which gets rid of that.
+This is particularly problematic because if you have a Cuda out of memory error,
+and then try to re-run it you'll still have a Cuda out of memory error,
+as the memory that was allocated before is now in that traceback.
+
+When we get a Cuda out of memory error memory you can call clean_mem and that will
+clean the memory in your Trace back it will clean the memory used in your in your Jupiter history,
+do a garbage collect, empty the Cuda cache and that should give us a totally
+clean GPU, and we don't have to restart your notebook .
+
+We did start with the goal of training an autoencoder, but now we are trading a classifier...
+in Notebook 8 we started an Autoencoder, and we decided we don't have the tools to make
+this work yet.
+So let's create the tools and then come back to it.
+In creating the tools we're doing a fashion Minst classifier.
+The tools hopefully will allow us to create a really good Autoencoder.
+We're gradually unwinding and we'll come back to where we're actually trying to get to.
+
+Why we're doing this classifier the techniques and Library pieces we're building will be necessary.
+Why do we need a zero mean, one standard deviation why do we need that and how do we get it?
+
+A deep Learning Net takes an input and puts it through a bunch of Matrix multiplications,
+(and activation functions that don't change the argument).
+Imagine we start with some 50x50 deep neural net.
+A 50 deep neural net is taking the previous input and doing a
+matrix multiplied by some (initially) random weights. 
+If we run this, after 50 times of multiplying matrices we end up with nans.
+That's no good. 
+Might be that the numbers in our matrices were too big so each time we multiply 
+the numbers are getting bigger.
+Maybe we should make them a bit smaller, let's try multiplying by 0.01,
+and we multiply many times, and now we've got zeros...
+
+Mathematically speaking these arent Nans (zeros) but really big (small) numbers
+that computers can't handle as the internal representation has no ability to discriminate between them.
+The way a floating point is stored, the further you get away from zero the less accurate the numbers are.
+To address this problem we have to scale our weight matrices exactly right.
+We have to scale in such a way that the standard deviation stays at 1 and the mean stays at 0.
+There's a paper that describes how to do this for multiplying lots of matrices together.
+They look to gradients and the propagation of gradients and they came
+up with a particular weight initialization of using a uniform with 
+with one over root n as the bounds of that uniform.
+They studied what happened with various different activation functions.
+We now have this way of initializing neural networks, 
+which is called either gloro initialize initialization or Xavier initialization.
+
+Here we have 100 inputs, root of 100 is 10, 1 over 10 is 0.1.
+If we start with random numbers and then we multiply by random numbers
+times 0.1 (Glorot initialization), we end up with numbers that are reasonable.
+
+If we take a a tensor t and just put one two four eighteen in it,
+the mean of that is simply the sum divided by the count so that's 6.25.
+We want a measure of how far away each data point is from the mean, how much variation there is.
+If all the data points are very similar to each other, 
+then the average distance away of each point from the mean is small.
+If you had dots widely spread we may end up with the same mean
+but the distance from each point to the mean is quite a long way.
+We want a measure of how far away the points are on average from the mean.
+
+We can take our tensor, subtract the mean and then take the mean of that.
+because we've got some numbers that are bigger than the mean and some that are smaller than the mean.
+If we average them we get zero.
+Instead we could either Square those differences and then take the square root,
+or we could take the absolute differences.
+
+for the first one here it is on a different scale and then add
+square root get it on the same scale so 6.87 and 5.88 are quite similar right
+but they're mathematically not quite the same but they're both similar ideas.
+This is the main absolute difference.
+This is called the standard deviation and this is called the variance.
+The standard deviation is bigger than the mean absolute difference is because in our original
+data one of the numbers is much bigger than the others, so when we Square it that number
+ends up having an outsized influence.
+That's a bit of an issue in general with standard deviation variance is that outliers 
+have an outsized influence so we've got to be a bit careful.
+
+Here's the formula for the standard deviation that's normally written as Sigma.
+It's just going to be each of our data points minus the mean squared
+plus the next data point minus the mean squared, and so forth for all the data points,
+and then divide that by the number of data points in square root.
+
+The mean absolute deviation isn't used as much as the standard deviation 
+because mathematicians find it difficult to use.
+But we're not mathematicians we have computers so we can use it.
+
+Variance we can calculate as the mean of the square of the differences.
+The mean of the squared data points minus the square of the mean of the data points is also the variance.
+This is very helpful because it means you actually never have to calculate this
+you can just calculate the mean.
+With just the data points on their own you can actually calculate the variance.
+This is a really nice shortcut, how we normally calculate variance.
+There is the latex version.
+
+Covariance tells us how much two things vary not just on their own but together.
+Here's a definition in math, lets see the code.
+Here's our tensor again um now we're going to want to have two things so let's create something called
+U which is just two times our tensor  with a bit of randomness.
+U and T are very closely correlated, but they're not perfectly correlated.
+The covariance tells us how they vary together and separately.
+
+Like before each data point minus its mean, but now we have 2 different tensors, t and u.
+We're going to do with u the other data points minus their mean and we multiply them together.
+So it's actually the same thing as standard deviation but in standard deviation it's
+kind of like the covariance with itself in a sense right
+That's a product we can calculate, then take the mean of that to
+give us the covariance between those two tensors.
+It is quite a high number and if we compare it to two
+things that aren't very related at all.
+Let's create a totally random tensor V, is not related to T.
+We do exactly the same thing, take the difference of T to its means 
+and V to its means and take the mean of that.
+That's a very small number.
+Covariance is basically telling us how related are these two tensors.
+
+Covariance and variance are basically the same thing.
+We can think of variance as being covariance with itself.
+We can change this mathematical version which is the one we just created
+in code to this easier to calculate version which gives the same answer.
+If you haven't done stuff with covariance you should experiment a bit 
+by creating different plots and experimenting with those.
+
+Finally the Pearson correlation coefficient, called r or rho 
+is just the covariance divided by the product of the standard deviations.
+This is just a scaled version of the same thing.
+
+Xavier is derived so when you do a matrix multiplication
+for each of the Ys we're adding together.
+all of these products so for we've got a i comma 0 times x
+zero plus a i comma one times X1 Etc and we can write that in segment
+notation so we're adding up together all of the aiks
+with all of the X case this is the stuff that we did in our first lesson of part two
+and so here it is in pure python code and here it is a numpy code.
+
+At the beginning our Vector has a mean of about zero and a standard deviation about one,
+because that's what we asked for.
+Let's create some random numbers and we can confirm they have a mean of
+about zero and a standard deviation of about one.
+If we chose weights for a that'd have a mean of zero we can
+compute the standard deviation quite easily.
+Let's do that a hundred times let's try creating X and creating something to multiply it by (a).
+We do the matrix multiplication and we're going to get the mean and mean of the squares.
+That is very close to our Matrix.
+As long as the elements in a and X are independent which they are because they're random,
+then we're going to end up with a mean of zero and a standard deviation of one for these products.
+
+So we can try it if we create a random number the normally
+distributed random number and then a second random number,
+multiply them together and then do it a bunch of times,
+and you can see here we've got our zero one
+That's the reason why we need this math dot square root 100.
+
+The problem is that it doesn't work for us because we use
+rectified linear units which is not something that Xavier looked at.
+Let's create a couple of matrices this is 200 by 100 this is
+just a vector well Matrix and a vector this is 200.
+Let's create a couple of weight matrices two weight matrices and two bias vectors.
+
+We've got some input data x's and y's and we've got some weight
+matrices and bias vectors so 
+Let's create a linear layer function and let's start going through a little neural net.
+Imagining this is the forward pass of our neural net.
+We're going to apply our linear layer to the axes with our first set of
+weights and our first set of biases.
+The mean and standard deviation is about zero and about one.
+(because we have 100 inputs and we divided it by square root 100 just like Xavier told us to)
+Our second one has 50 inputs and we divide by square root of 50 and so this
+all ought to work right.
+
+But now we're going to mess everything up by doing RELU.
+After we do a RELU we don't have as zero mean or a one standard deviation anymore.
+
+So if we create a deep neural network with global initialization but with a RELU.
+It's all gone to zero and you can see why right after a matrix
+multiply and a value our means and variances are going down (because a RELU squishes it).
+
+In "delving deep into rectifiers surpassing human level performance on imagenet classification"
+by Kaiming He et all, the initialization is root 2 over n.
+So let's try it.
+We've got 100 inputs, so we multiply it by root 2 over 100 and
+we get  non-zero numbers, even after going through 50 layers of depth.
+This is called Kaiming or He initialization. 
+
+Now that we know what initialization function to use for a deep neural network with a relu
+activation function the trick is to use a method called apply which all NN.modules have.
+So if we grab our model we can apply any function we like.
+For example let's apply the function print the name of the type so here you can see it's going through
+and it's printing out all of the modules that are inside our model.
+
+Notice that our model um has modules inside modules.
+it's a conv in a sequential in a sequential.
+But model did apply through all of them regardless of their depth.
+
+So we can apply an init function which simply does
+multiple random numbers normally distributed with random numbers
+times square root of 2 over the number of inputs.
+
+It's not even worth writing, been written init.kaiming_normal_()
+An underscore at the end of a Pytorch method name means that it changes something in place.
+So it will modify this weight Matrix that was initialized with normally distributed random numbers 
+based on root of 2 divided by the number of inputs.
+
+We can't do that to a sequential layer or a flattened layer.
+So we check that the module is a conv or linear layer and then we can say model.apply
+the function.
+
+Now we can use our LRfinder callbacks and this time we get rid of the gamma equals 1.1.
+it shouldn't be necessary anymore.
+and we can probably make that four now oh I should have need to recreate the model .
+We've got to a point where the learning rate finder works.
+
+When we create our learner we're going to use our momentum learner.
+After we get the model we will apply init weights.
+apply also Returns the model so we can with the initialization applied.
+
+Q: why do we double the number of filters in successive convolutions
+In each stride-2 convolution (these are all stride-2 convolutions) 
+is changing the grid size from 28 by 28 to 14 by 14. 
+So it's reducing the size of the grid by a factor of four in total.
+As we go from one to eight, from this one to this one same deal,
+we're going from 14 by 14 to 7x7 so we've reduced the grid size by four.
+We want it to learn something, and if we give it exactly the same number of
+units or activations it's not really forcing it to learn things as much.
+Ideally as we decrease the grid size, we want to have enough channels 
+that we end up with a few less activations, but not too few. 
+If we double the number of channels it means we've decreased the grid size 
+by 4, increase the channel count by 2, 
+so overall the number of activations has decreased by a factor of 2.
+We want to force it to find ways of compressing the information intelligently as it goes down. 
+We want to have a roughly similar amount of compute through the neural net 
+so as we decrease the grid size we can add more channels.
+Decreasing the grid size decreases the amount of compute.
+Increasing the channels then gives it more things to compute.
+So we're kind getting a compromise between the amount of compute that it's doing,
+while also giving it some kind of compression work to do.
+
+Still not able to train well ...it's not great but it is actually starting to train.
+we're getting these spikes and spikes
+The statistics show that it didn't quite work we don't have
+a mean of zero we don't have a standard deviation of one even at the start.
+why is that?
+Because we forgot something critical.
+Even when we had the correctly normalized metrics that we're multiplying by
+well you also have to have a correctly normalized input Matrix.
+And we never did anything to normalize our inputs.
+
+Our inputs actually if we get the just get the first xb Mini batch and get
+its mean and standard deviation it has a mean of 0.28 and a standard deviation of 0.35 
+so we actually didn't even start with a zero one input.
+We need to modify our inputs so they have a mean of zero and a standard deviation of one.
+
+Let's create a batch transform callback.
+We're going to pass in a function that's going to transform every batch.
+In the `before_batch` we will set the batch to be equal to the function applied to the batch.
+Note we don't need self.learn.batch here because we can read any because it's one
+of the four things that we kind of proxy down to the learner automatically but we do need it on the
+left hand side because it's only in the getatrr 
+We just leave it the same on both sides to avoid confusions.
+
+Let's create a function `_norm` that subtracts the mean and divides by the standard deviation.
+A batch has an X and a Y.
+It's the X part where we subtract the mean and divide by the standard deviation.
+The new batch will be that as the X and the Y will be exactly the same as it was before.
+
+Let's create an instance of the normalization of the batch transform callback 
+which is going to do the normalization function `norm`, 
+so we can pass it as an additional callback to our learner.
+
+Now that's looking a lot better.
+We had to check that our input Matrix was 0 1.
+All our weight matrices were 0 1.
+Then (without any tricks) it was able to train, and improved accuracy.
+
+If we look at the color dim and stats it looks beautiful.
+It's still not, there's some Randomness, and we've got like seven or eight layers...
+That Randomness you go through the layers by the last one it still gets a bit ugly 
+you can kind of see it bouncing around.
+We can see that also in the means and standard deviations.
+There are other reasons why this is happening (we'll see in a moment).
+But this is the first time we've got a somewhat deep convolutional model to train.
+
+Now we have from scratch, in a sequence of 11 notebooks managed to create
+a real convolutional neural network that is training properly.
+We don't have to use a callback for this.
+Alternatively we could modify the input data with a transform method from the
+hugging face data sets Library.
+
+We could modify our transform to just subtract the mean and divide
+by the standard deviation and then recreate our data loaders.
+
+If we now get a batch and check it it's now got yep I mean a zero
+and the standard deviation of one so we could also do it this way 
+
+For stuff that needs to dynamically modify the batch you can often do it either
+in your data processing code or you can do it in a callback.
+Both work well and you can see whichever one works best.
+
+It's training, but after all we did, we still don't have a mean of zero and a standard deviation of one,
+even from the start.
+Why?
+The problem is that we were putting our data through a RELU
+and our activation stats are looking at the output of those RELU
+blocks because that's kind of the end of each.
+Since the RELU removes all of the negative numbers
+it's impossible for the output of a RELU to have a mean of zero 
+(unless every single number is zero).
+RELU seems to be fundamentally incompatible with the idea of a correctly calibrated 
+bunch of layers in a neural net.
+
+Idea: Why don't we take our normal RELU and have the ability to subtract something from it.
+We take the result of our RELU and subtract.
+
+Just `-= self.sub`.  
+This will subtract something from our RELU.
+That will allow us to pull the whole thing down 
+so that the bottom of our value is underneath the x-axis and it has negatives.
+That would allow us to have a mean of zero.
+While we're there let's also do a leaky RELU, where we say let's not have 
+the negative speed totally flat just truncated but instead let's just have
+those numbers decreased by some constant amount.
+
+Lets see what that looks like.
+Those two together we call GeneralRelu, 
+which is where we do a leaky RELU where we make it so it's not flat under zero,
+but instead just less less sloped.
+We also substract something from it.
+Lets use `plot_func()` for plotting a function.
+Let's plot the generalRELU function with a leakiness of 0.1 so that will
+mean there's a 0.1 slope underneath the under 0, and we'll subtract 0.4.
+
+Above zero it's just a normal Y equals X line,  but it's been pushed down by 0.4.
+And when it's less than zero it's not flat anymore but it's got a slope of one-tenth.
+If we find the right amount to subtract for each amount of leakiness we can make a mean of zero.
+JH found a particular combination (.1 and .4) which gives us a mean of zero or thereabouts.
+
+Let's create a new convolution function where we can actually change what activation function is used.
+That gives us the ability to change the activation functions in our neural Nets.
+Let's change get_model to allow it to take an activation function 
+which is passed into the layers.
+Let's also make it easy to change the number of filters,
+so we're going to pass in a list of the number of filters in each layer,
+and we will default it to the numbers in each layer that we've discussed.
+
+We're just going to go through in a list comprehension creating a convolution 
+from the previous number of filters to the next number of filters.
+and we'll pop that all into a sequential along with a flatten at the end.
+
+We also need to be careful about init weights, 
+recall that Kiming initialization only applies to layers that have A RELU activation function.
+We don't have RELU, we have leaky RELU. 
+Subtracting a bit from it doesn't change things, but the fact that it is leaky does.
+
+Pytorch's `Kaiming_normal` has an adjustment for leaky RELU.
+If we pass into the `Kaiming_normal_` initialization your leaky value `a` 
+then we get the correct initialization for a leaky RELU.
+We need to change and it waits now to pass in the leakiness.
+ 
+
+The activation function is GeneralRELU with a leak of 0.1 and a subtract of 0.4.
+We use partial to create a function that has those built-in parameters.
+For `ActivationStats` we need to update it now to look for GeneralRelu.
+For `init_weights` we have a partial with leaky equals 0.1, and we call that `iw`.
+
+We get our model using that new activation function and that new init_weights 
+We fit that, and we're up to an accuracy of 87% 
+
+We've still got a little bit of a spike, but it's almost smooth and flat.
+Our mean is starting at about zero, standard deviation is still a bit low,
+but it's coming up around one, generally around 0.8.
+
+The percentage of dead units in each layer is very small
+so finally very nice looking training graphs.
+
+We had to invent our own activation function to make this work.
+Few people care about this, which in some ways it's the only thing that matters.
+It's not at all mathematically difficult to make it all work.
+And it's not at all computationally difficult to see whether it's working.
+Other Frameworks don't let you plot these kinds of things.
+So people don't know that they've messed up their initialization.
+
+A lot of models use more complicated activation functions rather than RELU or leaky RELU.
+We need to initialize our neural network correctly, but most people don't.
+Sometimes nobody's even figured out what the correct initialization to use is.
+
+A paper called "all you need is a good init" showed that there's
+a general way of initializing any neural network correctly regardless of what activation functions.
+It uses a simple idea: create a model, initialize it however you like,
+then go through a single batch of data, 
+look at the first layer see what the mean and standard deviation is.
+If the standard deviation is too big divide the weight matrix by a bit.
+If the means is too high subtract a bit off the weight Matrix.
+Do that repeatedly for the first layer until you get the correct mean and standard deviation.
+Then go to each other layer and do the same thing.
+
+We can do that using hooks.
+we can create a _lsuv_stats that will grab the mean of the activations of a layer and the
+standard deviation of the active activations of a layer.
+And we will create a hook with that function. 
+After we've run that hook to find out the mean and standard deviation of the layer,
+we will go through and run the model, get the standard deviation and mean see
+if the standard deviation is not one, see if the mean is not zero.
+We will subtract the mean from the bias, and we will divide the weight matrix by the standard deviation.
+And we will keep doing that until we get a standard deviation of one and a mean of zero.
+
+By making that a hook, we will grab all the values and all the convs.
+Once we've got all the relus and all the convs, we can use zip.
+zip takes a bunch of lists and create a list of the items:
+the first items, the second items, the third items and so forth.
+
+If I go through the zip of values and convs and just print them.
+it prints out their relu and the first conv,
+the second relu and the second conv, etc.
+We use zip a lot so it's important. 
+
+So we could go through the relus and the convs and call lsuv_init passing in those
+relus and convs.
+We're going to do that on the the batch,
+and we need to put the batch on the correct device for our model.
+
+Now have it ran almost instantly, it's made all the biases and weights correct, give us 0 1.
+Now we train, and it works, and we didn't do any initialization 
+other than call `lsuv_init`.
+This time we've got an accuracy of 0.86, previously it's 0.87 so
+pretty much the same thing close enough.
+
+If we want to see that happening, we could say print h.mean, h.std before and after. 
+So it starts at the first layer, at a mean of point negative 0.13 and a variance of 0.46
+and it kept doing the Divide Subtract,
+until eventually it got to minus zero standard deviation of one,
+and then it went to the next layer and it kept going until that was 0 1,
+until all of the layers had a mean of zero and a standard deviation of 1.
+
+`lsuv` is mathematically convenient, as we don't have to spend any time thinking about 
+a new activation function or we're using some activation function where nobody seems 
+to have figured out the corrected initialization for it.
+Just use `lsuv`.
+It did require a little bit more fiddling with hooks to get it to work.
+We haven't put this into a callback.
+It might be a good idea homework to see if we can come up with a callback 
+that does lsuv initialization.
+Careful because if we ran fit multiple times it would initialize it each time.

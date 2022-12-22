@@ -1,6 +1,12 @@
+<<<<<<< HEAD
 nbs/miniai/
 nbs/data/
 
+=======
+nbs/models/
+nbs/data/
+nbs/log/
+>>>>>>> 8ce60d57a854aff6e45fa4ad1ba0d90f3ef7c5a5
 _docs/
 _proc/
 

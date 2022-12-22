@@ -1,0 +1,165 @@
+Lesson17 Part 2
+Something which is quite similar to lsuv is batch normalization.
+Batch normalization was such an important paper that everybody was talking about it.
+One graph showed how many training steps you'd have to do to get to a certain accuracy
+to train a model on imagenet. 
+Then they showed what you could do with batchNorm, so much faster it was amazing.
+The idea of batchNorm is that we are normalizing each layer's inputs before training.
+But the distribution of each layer's inputs changes during training.
+And that's a problem, so we end up having to decrease our learning rates,
+and be very careful about parameter initialization.
+That the layers inputs change during training they call "internal covariate shift",
+(for a lot of people a confusing name).
+We can fix it by normalizing layer inputs during training.
+They make the normalization a part of the model architecture.
+We perform the normalization for each minibatch.
+
+We start with the simpler "layer normalization", which is easiest to explain by showing the code.
+We can create a module that will be used as a Layer.
+It has a `mult` for the multiplier, and `add` for the thing we're going to add.
+We're going to start by multiplying by 1 and adding 0, i.e., start by doing nothing.
+The layer has a `forward` function, (recall by default we have NCHW), i.e., 
+Batch by Channel by height by width.
+We're going to take the mean over the channel, height, and width, (1,2,3), 
+i.e., find the mean activation for each input in the minibatch.
+And we do the same thing for finding the variance.
+Then we're going to normalize our data by subtracting the mean
+and dividing by the square root of the variance, i.e., the standard deviation.
+
+We add a very small number `.eps` to the denominator,
+just in case the variance is zero or too small, to keep the number from going
+giant if we happen to get something with a very small variance.
+Adding epsilon to a divisor is common, and we should not assume that the defaults are correct.
+Very often the defaults are too small for algorithms that use an Epsilon.
+
+We are normalizing the input (ie the batch if it is the 1st layer)
+to put this in so we normalize.
+But maybe we don't want it to be normalized. 
+Maybe we wanted it to have something other than unit variance and zero mean.
+What we do is we then multiply it back by `self.mult` and add `self.add`.
+`self.molt` was 1 and `self.add` zero, so at first that does nothing.
+Because these are parameters, they are learnable, i.e., the SGD algorithm can change them.
+Hence this might not be normalizing the inputs to the next layer,
+because `self.mult` and `self.add could be anything.
+Layer normalization and batch normalization, it's *normalizing* it for the initial layers.
+We don't need `lsuv` if we have this in here because it's going to normalize it automatically.
+
+After a few batches it's not "normalizing".
+Previously, how big are the numbers overall and how much variation do they have
+was in every single number in the weight Matrix and in the bias vector.
+But this way those have been turned into just 2 numbers, making training a lot easier.
+So it can focus on those 2 numbers to change.
+Something subtle is going on,  because it's not just doing normalization (after the first few batches) 
+because it can learn to create any distribution of outputs.
+
+We need to change our conv function again.
+previously we changed it to add activation function `acct` to be modifiable.
+Now we're going to allow to add normalization layers `norm` to the end.
+We start by adding our conv2d as usual.
+Then if we are doing normalization we `append` the normalization layer 'norm(nf))` with `nf` inputs.
+`LayerNorm` doesn't care how many inputs, so we just ignore it.
+But `BatchNorm` cares if you've got an activation function.
+So our convolutional layer is a sequential bunch of layers.
+
+Now in our model we're going to add layer normalization to every layer except for the last one.
+Let's see how we go,  .872 so we've just got our best.
+Normalization layers do cause challenges in models.
+At first thought BatchNorm as a savior, (let us train deeper models quickly).
+But it also added complexity, these learnable parameters create complexity.
+So there has been a tendency lately to get rid of or at reduce the use of these kinds of layers.
+So knowing how to actually initialize your models correctly is becoming increasingly important,
+as people try to move away from these normalization layers.
+They are still helpful but they're not a silver bullet.
+
+BatchNorm is a bit bigger than LayerNorm.
+We have the `mult` and `add` as before but it's not just one number each but a whole bunch of them.
+The reason is that we're going to have one for every channel.
+So now when we take the mean and the variance we're actually taking it over the 
+batch Dimension and the height in which the dimensions.
+So we end up with one mean per Channel and one variance per Channel.
+Like before once we get our means and variances we subtract them out,
+and divide them by the Epsilon modified variance.
+Then multiply by `mult` and add `add` but now we're actually multiplying 
+by a vector of `mult` and we're adding a vector of `add`s.
+That's why we have to pass in the number of filters,
+because we have to know how many ones and how many zeros we have in our initial `mult`s and `add`s.
+The main difference is that we have one per Channel,
+and that we're taking the average across all of the things in the batch.
+(In LayerNorm we did it each thing in the batch had its own separate normalization).
+
+There's something else in BatchNorm which is tricky:
+During training we are not just subtracting the mean and the variance.
+Instead we're getting an exponentially weighted moving average of the means and the variances 
+of the last few batches.
+
+We create `vars` and `means` and initially the variances are all 1 and the means are all 0.
+There's one per filter just like before. 
+(we call them filters inside the model and channels in the first input).
+For example, we get our mean per filter and then we use `lerp`.
+What `lerp` does is it takes two tensors (e.g., 5 and 15), 
+they could be vectors or matrices.
+It creates a weighted average of them using the last argument, e.g., 0.5.
+With 0.5 it's going to take half of each number, so we end up with the mean.
+But if we used 0.75, then is going to take 0.75 times this number plus 0.25 of this number.
+So it's like a sliding scale.
+One extreme would be to take all of the second number so that would be with 1.
+the other extreme would be all of the first number (with 0).
+And we can slide anywhere between them.
+Like most Pytorch things we can move the first parameter, and get the same result.
+
+We're doing an in-place lerp, replacing `self.means` with one minus momentum `mom` 
+of self.means and plus self momumentum times this particular mini batch mean.
+It is doing momentum again with a `mom` of 0.1.
+(NB: seems the opposite of what we expected, (0.9). 
+A mom of 0.1 is saying that each minibatch `self.means` will be 0.1 
+of this particular minibatch mean and 0.9 of the previous sequence.
+That ends up giving us an *exponentially weighted moving average*.
+We do the same thing for variances.
+That's only updated during training, during inference we can just use the saved means and variances.
+
+The `_buffers` save the means and variances as part of the model.
+This makes `BatchNorm` very tricky to deal, particularly with transfer learning.
+We're going to get something that's much smoother, a single weird mini batch shouldn't screw things.
+Because we're averaging across the mini batch it's also going to make things smoother.
+Resulting in smooth training.
+
+We train with `norm=BatchNorm`. 
+JH was able to increase the learning rate up to 0.4 for the first time.
+He was trying to push the LR and now able to double it, and it's training smoothly.
+
+There are different types of layer based normalization.
+We've seen LayerNorm and BatchNorm, and there's also `InstanceNorm`,  `GroupNorm`,... 
+This picture from the GroupNorm paper explains what happens. 
+They concatenated flattened HW into a single axis, since they can't draw 4D cubes.
+In BatchNorm, all the blue stuff is what we average over 
+(across the batch and across the height and width)
+and we end up with one normalization number per Channel.
+LayerNorm averages over the channel and the height and the width,
+and it has a separate one per item in the mini batch.
+A bit subtle, as the `mult` `add` just had a single number for each.
+InstanceNorm only averages across height and width so there's going to be a separate one 
+for every channel and every element of the minibatch.
+GroupNorm is like InstanceNorm but it arbitrarily groups a bunch of channels together,
+and we decide how many groups of channels there are, and averages over them.
+GroupNorm tends to be a bit slow, because of the way these things are implemented is a bit tricky.
+GroupNorm avoids some of the challenges of some of the other methods, so it's worth trying it. 
+BatchNorm has the additional momentum based statistics.
+The use of momentum based statistics, to store things per Channel, 
+what do you average over, etc. are somewhat independent choices.
+We can make particular combinations of those which have been given particular names.
+
+Let's put the initialization methods all together. 
+We've been using a batch size of 1024 for speed purposes.
+If we lower it to 256 it's going to see more minibatches, and that should improve performance.
+We're trying to get to .90.
+We'll use pytorch's BatchNorm `nn.BatchNorm2d`.
+We'll use our momentum learner and will fit for 3 epochs.
+It's going a little bit more slowly now.
+Lets decrease the LR and keep the existing model and train for a little bit longer.
+As it's getting close to a good answer, lets fine-tune that.
+By decreasing the LR we give it a chance to fine-tune a bit.
+We got to .878 accuracy after 3 epochs, an improvement thanks to using a smaller minibatch size.
+With a smaller mini batch size we have to decrease the learning rate.
+We could still use 0.2 and after one more epoch we've got .897, then .899.
+Close to our .90 goal. 
+This is the end initialization an incredibly important topic.

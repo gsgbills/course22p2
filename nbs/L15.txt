@@ -1,0 +1,796 @@
+Lesson 15.
+We're going to create a convolutional autoencoder,
+and in the process we will see why it is a tricky thing.
+We will begin to work on a deep learning framework.
+
+Before we can create a convolutional autoencoder we need to
+talk about convolutions, what are they and what are they for.
+Convolutions allow us to tell our neural network a little bit 
+about the structure of the problem. 
+That's going to make it a lot easier for it to solve the problem.
+We're doing things with images, laid out on a 2D grid for black and white 
+or a 3D for color or a 4D for a color video.
+There is a relationship between the pixels going across and the pixels going down.
+They tend to be similar to each other.
+Differences in those pixels across those dimensions tend to have meaning.
+Sets patterns of pixels that appear in different places often represent the same thing.
+For example a cat in the top left is still a cat even if it's in the bottom right.
+These kinds of Prior information is something that is naturally captured 
+by a convolutional neural network. 
+Something that uses convolutions will be able to use less parameters and less computation 
+because more of that information about the problem is encoded directly into our architecture.
+
+There are other architectures that don't encode that prior information as strongly, 
+such as a multi-layer perceptron or a Transformers Network.
+Those kinds of architectures could potentially give us more flexibility.
+Given enough time compute and data they could potentially find things 
+that maybe CNNs would struggle to find.
+We are not always going to use CNNS but they're a good starting point and important to understand.
+They're not just used for images.
+We can also take advantage of one-dimensional convolutions for language-based tasks for instance.
+
+In this notebook we are importing stuff from miniAI, 
+a little library that we're creating using nbdev:
+ 
+from miniai.datasets import *
+from miniai.conv import *
+
+The datasets notebook starts with an export directive that says that 
+the default export module is called datasets.
+Some of the cells have an export directive on them. 
+At the very bottom of the notebook we have nbdev.nbdev_export() 
+to create a file called datasets.py, which contains those cells that we exported.
+ 
+Everything for nbdev is stored in settings.ini and there's something in that file 
+saying create a library called miniai.
+We can't use the miniai library until we install it.
+We haven't uploaded it as a pip installable package to a public server.
+But we can install a local directory as a python module, using pip install -e (stands for editable),
+and that sets the (e.g., current) directory as a Python module. 
+That's going to install the directory as a library and then we can import things from that library.
+
+We're going to grab the mnist dataset and create a convolutional neural network (CNN).
+What are convolutions?
+Matt Kleinsmith wrote a medium article on CNN's from different viewpoints. 
+Say that this is a 3x3 image with 9 pixels labeled from A to J.
+A convolution uses a kernel, (just another tensor), in this case it's a 2x2 Matrix.
+We call Alpha Beta Gamma Delta the 4 values in this convolution kernel.
+We apply a convolution with a 2x2 kernel to a 3x3 rank-2 tensor that might represent an image.  
+We overlay the kernel over the first 2x2 subgrid and we match color to color.
+The output of the 2x2 overlay would be P in the top left of a 2x2 output.
+
+Next slide the kernel to the top right of the 2x2 output,
+and apply each of our coefficients to these respectively colored squares.
+And then dito over the bottom left and then over the bottom right.
+We end up with this equation:
+P = Alpha * A + beta * B + gamma * D + Delta * E + Bias
+Q= , R= , S= ...
+We're repeately multiplying them together and adding them up.
+We flatten these into rank-1 tensors and then doing a DOT product.
+This is called a convolution.
+
+Let's create a convolution, grab our training images, take a look at one, 
+and let's create a 3x3 kernel, which is a Rank-2 tensor.
+
+In the 3X3 Matrix rank two tensor and we could draw what that looks like
+not surprisingly just looks like a bunch of lines 
+
+What would happen if we slide this over just these nine pixels
+over this 28 x 28 well what's going to happen is if we've
+got some the top left for example 3x3 section as these names then
+we're going to end up with negative A1 because the top three are all negative 
+negative A1 minus A2 minus A3 then X to just zero so that won't do anything and 
+then plus A7 plus A8 plus a 9.
+why is that interesting? 
+
+Let's grab just the first 13 rows and first 23 columns of our image,
+and use Gray conditional formatting.
+
+If we take rows 3, 4 and 5 columns 14 15 16, and we multiply it by this kernel it gives us a
+fairly large positive value.
+This is a DOT product, an element-wise multiplication followed by a sum.
+This is going to find the top Edge, this one is a top Edge, bottom Edge, etc.
+
+We would like to apply this kernel to every single 3x3 section.
+The apply kernel function takes some particular row and some particular column and some particular
+tensor as a kernel and does that multiplication dot sum 
+for example we could replicate
+this one by calling apply kernel and this here is the center of that three by
+three grid area and so there's that same number 2.97
+
+Now we could apply that kernel to every one of the 3x3 windows in this 28x28 image.
+We're going to be sliding over like this red bit sliding over here but we've
+actually got a 28x28 input not just a 5x5 input.
+so to get all of the coordinates let's just simplify it to do this 5x5.
+we can create a list comprehension we can take i through
+every value in range five and then for each of those we can take j for every value in range 5.
+
+If we just look at that Tuple you can see we get a list of lists containing all of those coordinates
+so this is a list comprehension in a list comprehension, a
+really helpful idiom and I certainly recommend getting used to it.
+
+Now we're going to call apply_kernel for each of those, so if we go through
+from 1 to 26 and then for each of those go through from 1 to 26 again and call apply_kernel.
+That's going to give us the result of applying that convolutional kernel to
+every one of those coordinates.
+And there's the result, highlighting the top edges.
+
+We can do another convolution this time with the left Edge tensor,
+which looks as a rotated version of the top Edge tensor.
+
+If we apply the left Edge kernel we're going to pass in the left Edge tensor for the same
+list comprehension in a list comprehension and this time we're getting 
+highlighting all of the left edges in the digit 
+
+A 2x2 can be looped over an image creating these outputs. 
+In the process of doing so we are losing the outermost pixels of our image.
+we'll learn about how to fix that later.
+but just for now notice that the as we are putting our 3x3
+through for example in this 5x5 if there's only one two three places that we can put it going across not five places because we need some kind of edge. 
+
+From the Xyler and Fergus pictures from from lesson one we can
+recognize that the kind of first layer of a CNN is often looking for kind of edges and
+gradients, etc. 
+This is how it does it. and then convolutions on top of
+convolutions with non-linear activations between them can combine those into
+curves or corners, etc.
+
+how do we do this quickly? It is super slow doing this in Python. 
+I know how to multiply matrices, maybe I can convert a convolution into a matrix multiplication,
+and that became known as the im2col.
+In the paper they describe it.
+say you are putting this 2x2 um kernel over this 3x3 bit of an image.
+This window needs to match to this bit of this window.
+
+[We can unwrap this to a one one two two uh sorry one two one two downwards
+to here one two one two to unroll it like so and you could unroll the kernel
+here um yeah sorry this is one two one one so
+this is bit is here one two one one and then 
+you can unroll the kernel one one two two to here one one two two and then
+once they they've been moved flattened out and moved in that way and then you'll do exactly the same
+thing for this next patch here 2013 you flatten it out and put it here 2013. 
+so if you basically take those kernels and flatten them out in this format,
+then you end up with a matrix multiplier. 
+If you multiply this matrix by this Matrix you'll end up with the output 
+that you want from the convolution. 
+So this is a basically a way of unrolling our kernels and our input features 
+into matrices such as when you do the Matrix multiply you get the right answer.
+
+It's a Nifty trick, we're kind of cheating a little bit,
+as implementing that is kind of boring.... so instead we linked to
+a numpy implementation, which is here and it [also part of it is this get indices which is here.??]
+It's a little bit tedious with repeats and tiles and reshapes and whatnot. 
+In Pytorch it's called unfold.
+
+Pytorch expects there to be a batch access and a channel Dimension, 
+so we'll add two unit leading dimensions to it. 
+Then we can unfold our input for a 3x3 and that will give us a 9 by 676 input 
+
+We can take our kernel and just flatten it out into a vector.
+View changes the shape and -1 just says dump everything into this dimension.
+So that's going to create a length 9 vector.
+Now we can do the matrix multiply just like they've done here, 
+of the kernel Matrix that's our weights by the unrolled input features.
+That gives us a 676 long we can then view that as 26x26.
+And we get back our left Edge tensor result.
+
+This is how we can create a a better implementation of convolutions from scratch.
+But we're not always creating the GPU optimized versions from scratch.
+If we use apply_kernel we get nearly 9 milliseconds,
+if we use unfold with Matrix multiplier we get 20 microseconds, about 400 times faster.
+Pytorch conv2D is about the same speed on CPU, but would also work on GPU.
+In this case it's a pretty small image may be bigger with larger images,
+
+We use f.conv2D unless there's some tricky convolution with some weird thing around channels or
+dimensions, then we can try this unfold trick. 
+
+We could do the same thing for diagonal edges. 
+If we grab the first 16 images then we can do a convolution on our whole batch 
+with all of our Kernels at once.
+We end up with a 26x26 with 4 kernels and 16 images.
+
+To get good GPU acceleration we're doing a bunch of kernels and images all at
+once across across all of their pixels.
+That's what happens when we take a look at our various kernels for a particular
+image, left Edge, top Edge, diagonal top left and top right um .
+that is optimized convolutions works just as well in CPU or GPU obviously GPU will be faster.
+
+PADDING:
+how do we deal with the problem that we're losing one pixel on each side?
+We can add padding. 
+Rather than starting our window here we start it right over here 
+and we actually would be up one as well, and so these three on the left here
+we just take the input for each of those as zero so we're basically just assuming
+that they're all 0. 
+There are other options we could choose, e.g., we could assume they're the same
+as the one next to them.
+The simplest and the one we normally do is just assume that they're zero.
+This is called one pixel padding.
+
+If we did two pixel padding with a 5x5 input and a 4x4 kernel so that grays our kernel
+then we're going to start right up way over here on the corner and then you can see what happens
+As we slide the kernel over there's all the spots that it's going to take 
+and so that this dotted line area is the area that we're effectively going through.
+But all of these white bits we're just going to treat as zero.
+The green is the output and we end up with a 6x6 for a 5x5 input.
+
+Even numbered Edge kernels are not used very often; 
+we normally used odd numbered kernels
+For example a 3x3 kernel and one pixel of padding we get back the same size you start with.
+If we use 5x5 with three pixels of padding you'll end up with the same size you start with.
+so generally odd numbered edge size kernels are easier to deal with to make sure we
+end up with the same thing we start with.
+
+We've got a odd numbered size KS by KS size kernel then KS truncate divide two
+((that's what slash slash means)) will give the right size.
+Another trick we can do is we can move our window across by a different amount each time.
+The amount we move it by is called the stride, here's a case of doing a stride-2.
+[ a straight two padding one so we start out here and then we jump across two
+and then we jump across two and then we go to the next row so that's called a stride-2 convolution]]
+stride-2 convolutions are handy because they actually reduce the dimensionality of your input 
+by a factor of two.
+We want to do that a lot, for example with an autoencoder and 
+for most classification architectures we keep on reducing the grid size by a factor of 2
+again and again using stride-2 convolutions with padding of one.
+
+CONVNET
+let's create a convnet using these approaches.
+We're going to get the size of our training set.
+this is all the same as before number of categories number digits 
+sides of our hidden layer as previously with our sequential linear models.
+with our MLPs we basically went from a site from the number of
+pixels to the number of hidden and then a value and then the number of hidden to
+the number of outputs so here's the equivalent with a convolution now the problem is
+that you can't just do that because the output is not now 10 probabilities for
+each item in our batch but it's 10 probabilities for each item 
+in our batch for each of 28 x 28 pixels
+because we don't even have a straight or 
+anything so you can't just use the same simple approach that we had for MLP we
+have to be a bit more careful.
+
+Let's create a `conv` function so it does a conv2D with a stride-2 
+optionally followed by an activation.
+If Act is true we will add in a value activation.
+`conv()` will either return a `conv2d` or a little sequential containing
+a `conv2d` followed by a value.
+Now we can create a CNN from scratch as a sequential model.
+Since activation is true by default this is going to take the 28x28 image starting with
+one channel and create an output of four channels. 
+`ni` is the number of n, `nf` is the number of filters.
+We'll say filters to describe the number of channels that our convolution has.
+
+that's the number of outputs and
+it's very similar to the idea of the number of outputs in a linear layer 
+except this is the out number of outputs in our convolution ??
+
+We add comments to remind of the grid size after each step.
+We had a 28x28 input, put it through a stride-2 conv so the output of this will be 14x14.
+The same thing again but this time we'll go from 4 Channel input to an 8 channel output
+and then from 8 to 16 . 
+We're now down to a 4x4 and then down to a 2x2 and then finally we're down to a 1x1x1.
+So on the very last layer we won't add an activation, and the very last layer is going to
+create 10 outputs.
+Now we can call flatten to remove those unnecessary unit axes.
+We take that, pop our mini batch through it and we end up with exactly what we want a 16 by 10. 
+
+For each of our 16 images we've got 10 probabilities of each possible digit.
+so if we take our training set and make
+it into 28 x 28 images and we do the same thing for a validation set and then we create two data sets
+one for each which are called train data set and valid data set and we're now going to train this
+on the GPU.
+
+If you've got a M1 or M2 Apple silicon Mac you've got a device called MPS, which uses the Mac GPU.
+If you've got Nvidia you can use Cuda, which is 10+ times faster than a Mac.
+To know what device to use (Cuda or MPS) we can check `torch.backends.mps.is_available()` 
+to see if you're running on a Mac with MPS.
+Similarly `if torch.cuda.is_available()` to see if you've got an Nvidia GPU. 
+and if you've got neither use the CPU.
+
+JH created to_device which takes a tensor, or a dictionary, or a list of tensors, etc., 
+and a device to move it to.
+It just goes through and moves everything onto that device. 
+If it's a dictionary a dictionary of things values moved onto that device
+so there's a handy little function and so we can create a
+custom collate function which calls the Pytorch default collation function and
+then puts those tensors onto our device.
+And so with that we've now got enough to run train this neural net on the GPU 
+
+We created the get_dls function in the last lesson so we're going to use that 
+passing in the datasets that we just created and our default collation function.
+We're going to create our Optimizer using our CNN's parameters
+and then we call fit (also created in our last lesson).
+
+JH reduced the learning rate by a factor of four and round it 
+again and eventually got to a fairly similar accuracy to what we did on our MLP.
+
+We've got a CNN working using code that we had already built: the dataset class, get_dls(), fit().
+
+Notice we had to take the model and put it on the device.
+We put all of the tensors that are in that model onto the MPS or Cuda device if appropriate.
+In an input of size `64x1x28x28` the axes are `batch,channel,height,width`. 
+This is often represented as `NCHW` (where `N` refers to batch size). 
+Tensorflow, on the other hand, uses `NHWC` axis order (aka "channels-last"). 
+Channels-last is faster for many models, so recently it's become more common 
+to see this as an option in PyTorch too.
+
+We have 1 input channel, 4 output channels, and a 3×3 kernel.
+We've actually had a bit of a win here which is that 
+the number of parameters in our CNN is pretty
+small by comparison to the number in the MLP version.
+The number of parameters is equal to the size of this Matrix, M times n h
+
+Plus the number in this which will be NH times 10.
+at some point we probably should  create something that
+allows us to automatically calculate the number of parameters.
+(ignoring the bias there of course).
+
+Let's see what would be a good way to do that maybe NP dot product,
+We could just calculate this automatically by doing a little list comprehension 
+here so there's the number of parameters across all of the different layers so both bias and weights.
+Let's use pytorch so we could turn that into a tensor and sum it up
+so that's the number in our MLP and then the number in our simple CNN
+We've gone down from 40K to 5K and got about the same number there.
+A better way than NP dot product o .shape just to say .numel
+
+This CNN cannot handle any sized image only images that once they go
+through these two convs end up with a 1x1, because otherwise you can't .flatten
+it and end up with 16x10. 
+We will learn how to create convnets that can handle any sized input.
+
+Receptive field
+Consider this one input channel for output channel 3x3 kernel
+so that's just to show what we're doing here.
+simple CNN is the model we created, like a sequential model containing sequential models. 
+because that's how our conv function worked so simple cnn0 is
+our first layer it contains both a convener value so simple CNN 0 0 is the
+actual conv so if we grab that call it conv1 it's a 4x1 by 3x3 so
+number of input channels and height by width of their
+kernel and then it's got its bias as well so that's how we could kind of
+deconstruct what's going on with our weight matrices or our parameters inside a convolution.
+
+now excel because JH loves this trick. 
+On the conv example spreadsheet  page is something that looks like the number seven.
+It is the number seven from mnist.
+Here we've got like a top the top Edge kernel being applied 
+and over here we've got a right edge kernel being applied.
+If we zoom in Excel you'll see actually these numbers are conditional formatting 
+applied to spreadsheet cells.
+JH copied the actual pixel values into Excel and then applied conditional formatting.
+Now we can see what the digit is actually made of.
+JH created our top Edge filter, left Edge filter, and applying that filter to that window.
+It looks a lot like numpy it's just a sum product and Excel can actually do broadcasting.
+We have to hit Apple shift enter or control shift enter
+and it puts these little curly brackets around it it's called an array formula 
+it's basically lets you do simple broadcasting in Excel.
+
+if I click on it it's applying this filter to this input area and so forth
+JH just arbitrarily picked some different values here and so something to notice
+now in my second layer so here's conv1 is conv2 just got a bit more work to do.
+We actually need 2 filters because we need to add together 
+this bit here applied to this with this kernel applied and this bit here with this kernel applied
+So we actually need one set of 3x3 for each input and
+also I want a set two separate outputs so I actually end up needing
+a 2x2 by 3x3 weights Matrix or weights a tensor.
+
+In pytorch we had a Rank 4 tensor and this one the same thing.
+this input is using this kernel applied to here and this kernel applied to here
+Remember that you have these Rank-4 tensors and so rather than doing stride-2 convs 
+JH did Max pooling to reduce the dimensionality.
+
+Here I've got 28 x 28 I've reduced it down here to 14x14 by
+taking the Max of each little 2x2 area.
+Maxpooling has the same effect as a straide-2 conv.
+Not mathematically identical but the same effect which it does
+a convolution and reduces the grid size by two on each dimension.
+
+How do we create a single output if we don't keep doing this until we get to 1x1
+(too lazy to do in Excel) this is a little bit out of favor as well but one
+approach we can do is we can take every one of these.
+We've now got 14x14 and apply a dense layer to it.
+This has basically all been flattened out into a vector.
+We've got some product of this by this plus the sum product of this by this 
+and that gives us a single number and so that is how we could then
+optimize that in order to optimize our weight matrices now.
+The more modern approach (we don't use dense layer much anymore)
+it still appears in VGG which is very old now.
+But it's still used because for certain things,
+like style transfer or general perceptual losses people still find vgg seems to work better.
+The more common approach nowadays is we take the penultimate layer and 
+we just simply take the average of all of the activations.
+
+The main reason I wanted to show you this was to zoom out a little
+bit here let's take something in our
+Max pool here and I'm going to say Trace precedence to show you here it is the area 
+that it's coming from: these four numbers
+now if I trace precedence again saying what's actually impacting this
+obviously the kernels impacting it and then you can see that the input area here
+is a bit bigger and then if I trace precedence again
+then you can see the input area is bigger still.
+so this number here is calculated from all of these numbers in the input.
+This area in the input is called the receptive field of this unit.
+The receptive field in this case is one two three four five 6x6 
+and that means that a pixel way up here in the top right has literally 
+no ability to impact that activation it's not part of its receptive field.
+If you have a whole bunch of straight two columns, each time you have one the
+receptive field is going to get twice as big.
+So the receptive field at the end of a deep network is actually very large.
+But the the inputs closest to the middle of the receptive field have the biggest
+say in the output because they implicitly appear the most often in
+all the dot products that are inside this convolutional window.
+
+The receptor field is not just like a a single binary on off thing.
+certainly all the stuff that's not got precedence here is not part of it at all.
+But the closer to the center of the receptive field the more impact 
+it's going to have the more ability it's got
+to change this number so the receptor field is an important concept.
+Playing around with excel's precedent arrows I think is a nice way to say that.
+
+BREAK
+We look now at the autoencoder Notebook.
+We import the usual stuff and we've got one more of our own modules to import.
+We are going to switch to a different dataset, the fashion MNS dataset.
+We can take advantage of the stuff that we did in 05datasets 
+and the huggingface stuff to load it.
+We never actually built any models with it so let's first of all do that.
+
+We convert each image into a tensor and that's going to be an @inplace transform 
+this decorator.
+We can call data set dictionary with transform 
+and here we have our example of a sneaker.
+
+We will create a collation function.
+we're collating the dictionary for that dataset 
+((we built that in the datasets notebook))
+
+and let's actually make our collate function something that does
+to device which we wrote in our in our last notebook 
+and we'll get a little data loaders
+function here which is going to go through each item in the data set dictionary
+and create a data loader for it and give us a dictionary of data loaders
+
+dataload of a training and a dataloader for validation, 
+so we can grab the X and Y batch by just calling next on that iterator.
+We can get the names of the features
+and so we can then get create an itemgetter for our y's and we can so we'll call
+that the label getter we can apply that to our labels to get the titles of
+everything in our mini batch and we can then call our show images
+that we created with that minibatch with those titles 
+and here we have our fashion mnist minibatch.
+
+Let's create a classifier and we're just going to use exactly the same code 
+copy and paste it from the previous notebook.
+Here is our sequential model and we are going to grab the parameters of the CNN
+and the CNN I've actually moved it over to the default device.
+
+it's fitting very slowly. why?
+um let's think about let's have a look at our data set so
+when it's finally finished let's take a look at an item from the data set
+actually let's not look at the data set let's actually 
+go all the way back to the data set dictionary so
+before it gets transformed data set dictionary 
+and let's grab the training part of that
+and let's grab one item and actually we can see here the problem
+for n list we had all of the data loaded into
+memory into a single big tensor but this um hugging face one is created in a much
+more kind of normal way which is each image is a totally separate PNG image
+it's not all pre-converted into a single thing.
+
+so our data loader is spending all of its time decoding these pngs
+okay so while I'm training I can take h-top and you can see that basically my
+CPU is 100 used now.
+that's a bit weird because I've actually got 64 CPUs why is
+it using just one of them as the first problem but why does it matter?
+It matters because the GPU is only using 1%, hence it's slow. 
+To make things faster we want to be using more than one CPU to decode pngs,  
+just add a extra argument to the data loaders, num_workers, e.g., use eight CPUs.
+
+But then we can get a "quirky" error, trying to use multiple processes.
+Generally in Python and pytorch using multiple processes gets complicated.
+We can't have a data loader put things onto the GPU in separate processes.
+The reason for this error is that we used a collate function that put things 
+on the device that's incompatible using multiple workers. 
+That is a problem and the answer, sadly, 
+is that we have to rewrite our fit function entirely.
+That is a problem that we're going to have to think about.
+Also, it is not very accurate, in "papers with code" leaderboard 
+we can see that we're not very good, so we need to improve.
+There are a lot of things we could try to improve, but all involve modifying our fit function.
+
+We wanted to do create an autoencoder, 
+to start with our 28x28 input image (which its a digit three) 
+and we're going to put it through, for example, a stride-2 conv 
+and that's going to have an output of a 14x14. 
+We can have more channels, from 28x28x1 let's do 14x14x2.
+So we've reduced the height and width by two but added an extra channel
+so overall this is a 2X decrease in parameters.
+Then we could do another stride-2 conv and that would give us a 7x7 and again
+we can choose however many channels we want.
+Let's say we choose 4 so now compared to our original 
+we've now got a times 4 reduction.
+We could do that a few times, or we could just stay there, this is compressing.
+Now we could have a convolution layer (or group of layers),
+which does a convolution and also increases the size.
+There is something called a transposed convolution
+[leave you to look up if you're interested which can do that also known as a
+a stride one-half convolution]
+
+But there is a really simple way to do this: 
+let's say we've got a 3x3 pixels, we could make that into a 6x6 by 
+copying each pixel into 4 pixels, 
+simply turning each pixel into four pixels, nearest neighbor up sampling.
+It is not a convolution, it is just copying, but then we
+could apply a stride-1 convolution and that would double the grid size 
+So our autoencoder is going to need a deconvolutional layer and that's going
+to contain two layers, up sampling nearest neighbor scale factor of 2, 
+followed by a conv 2D with a stride-1.
+For padding put kernel size slash two, that's a truncating division 
+because that always works for any odd sized kernel.
+As before we will have an optional activation function
+and then we will create a sequential using *layers 
+so it's going to pass in each layer as a separate argument, which is what sequential expects.
+
+Let's write a new fit function, copied over from our previous one, going through each epoch. 
+We pulled out eval() into a separate function.
+Here is the autoencoder:
+ae = nn.Sequential(   #28x28
+    nn.ZeroPad2d(2),  #32x32
+    conv(1,2),        #16x16
+    conv(2,4),        #8x8
+#     conv(4,8),        #4x4
+#     deconv(8,4),      #8x8
+    deconv(4,2),      #16x16
+    deconv(2,1, act=False), #32x32
+    nn.ZeroPad2d(-2), #28x28
+    nn.Sigmoid()
+).to(def_device)
+
+We want to go down by one two three to get to a 4x4x8
+But starting at 28x28 we can't divide three times and get an integer.
+We first do a zeropad2d(2), to add padding of two on each side, and get a 32x32.
+Then a conv(1,2) with two channel output, that gives a 16x16x2,
+and then again to get an 8x8x4 and then again to get a 4x4x8. 
+So this is doing an 8X compression.
+Then we can call deconv to do exactly the same thing in reverse.
+The final one with no activation (act=False) and
+then we can truncate off those two pixels off the edge.
+Pytorch lets you pass -2 to zeropadding to crop off the final two pixels.
+Then we add a sigmoid which forces everything to go between 0 and 1 which we need.
+
+Then we will use MSE loss to compare those pixels to our input pixels.
+NB: our loss function is being applied to the output of the model and itself. 
+We don't have YBs here we have xBs.
+
+We are trying to recreate our original fit function, 
+so we can now see what is the MSE
+loss and it's not like going to be particularly human readable,
+but it's a number, we can see if it goes down.
+
+Then we can do our SGD with the parameters of our autoencoder with MSE
+loss call that fit function we just wrote.
+It's really slow for reasons we've discussed I've done it before and
+what we want is to see that the original which is
+which is here gets recreated and the answer is not really.
+Roughly the same things, but there's no point having an auto encoder
+which can't even recreate the originals.
+If these looked almost identical to these it would be a fantastic network 
+at compressing things by eight times.
+This was fiddly to try and get it to work at all.
+He discovered that it can get it to start
+training is to start with a really low learning rate 
+for a few epochs and then increase the learning rate after a few epochs.
+At least it gets it to train and shows something vaguely sensible
+but it still looks pretty crummy.
+Jeremy tried switching to Adam and I actually removed
+the tricky bit I removed these two as well, 
+but he couldn't get this to recreate anything reasonable.
+There are  many reasons it could be, maybe we need a better Optimizer, 
+a better architecture, a variational autoencoder, etc.  
+
+But doing it like this is going to drive us crazy.
+We need to be able to rapidly try all kinds of different things.
+JH often sees in projects/ kaggle is code that is
+all like manual, and then their iteration speed is is too slow.
+We need to be able to rapidly try things so we're not going to keep
+doing stuff manually anymore. 
+So let's build up a framework that we can use to rapidly try
+things and understand when things are and are not working.
+We are going to start creating a learner from scratch.
+
+A learner will allow us to try anything that we can imagine very quickly.
+We will build that on top of that learner things that will
+allow us to introspect what's going on inside a model 
+to do multi-process Cuda to go fast,
+to add things like data augmentation, 
+and to try a wide variety of architectures quickly.
+
+Let's start with fashion_mnist as before.
+Let's create a data loaders class which
+is going to look a bit like what we had before.
+We're just going to pass in two data loaders and store them away.
+and I'm going to create a @classmethod from data set dictionary.
+and what that's going to call dataloader on each of the data set dictionary items
+with our batch side batch size and instantiate our class.
+
+class DataLoaders:
+    def __init__(self, *dls): self.train,self.valid = dls[:2]
+
+    @classmethod
+    def from_dd(cls, dd, batch_size, as_tuple=True):
+        return cls(*[DataLoader(ds, batch_size, num_workers=6, collate_fn=collate_dict(ds)) for ds in dd.values()])
+        
+If you haven't seen @classmethod before it's what allows us to say 
+Dataloaders.something.
+In order to construct this we could have put this in init() 
+but we'll be building more complex data loaders things later so I thought we
+might start by getting the basic structure right.
+This is all pretty much the same as what we've had before.
+
+I'm not doing anything on the device here because as we know that didn't really work.
+We're going to use to_device.
+
+Here's an example of a very simple
+learner that fits on one screen and is going to replace our fit function.
+A learner is going to be something that is going to train or learn a
+particular model using a particular set of data loaders, a particular loss function,
+a particular learning rate, a particular Optimizer 
+or some particular optimization function.
+
+Normally people would store each of these separately, which is boilerplate.
+Instead we call fc.store_attr() to do that.
+Is going to we've got the basic stuff that we have
+for keeping track of accuracy (for classification where we can use accuracy).
+We put the model on our device, create the optimizer,
+store how many epochs we're going through,
+then for each epoch we'll call the one_epoch function,
+either to do train or evaluation.
+We pass in true if we're training and false if we're evaluating.
+We set the model to training mode or not.
+We then decide whether to use the validation set or the training set based
+on whether we're training and then we go through each batch in the data loader
+and call one_batch.
+one_batch is going to put our batch onto the device, call our model
+call our loss function, and then if we're training then do our backward step, 
+our Optimizer step in our zero gradient 
+and then finally calculate our metrics or our stats.
+Here's where we calculate our Matrix and so that's basically what we have.
+
+Let's go back to using an MLP we call fit and away it goes.
+We could try now to use more than one process, and now it it is fast.
+We've got a learner that can fit things but it's not very flexible.
+it's not going to help us for example with our Autoencoder because there's no
+way of changing which things are used for predicting with or for calculating with.
+We can't use it for anything except things that involve accuracy 
+with a multi-class classification.
+It's a start, all on one screen so we can see what the basic learner looks like.
+
+how do we do things other than multi-class accuracy?
+I decided to create a metric class, something where we are going to define
+subclasses of it that calculate particular metrics.
+For example here is a subclass of a metric called accuracy.
+If you haven't done subclasses before, think of this
+as saying please copy and paste all the code from here
+into here, but the bit that says def calc replace it with this version.
+So in fact this would be identical to copying and pasting this whole thing 
+typing accuracy here and replacing the definition of calc with that.
+It's actually more powerful than that, there's more we can (later) do with it. 
+
+class Accuracy(Metric):
+    def calc(self, inps, targs): return (inps==targs).float().mean()
+    
+The accuracy metric is here and then this is our 
+really basic metric which we're going to use just for loss.
+
+Lets create an accuracy metric object.
+acc = Accuracy()
+
+We're basically going to add minibatches of data, e.g.,
+a mini batches of inputs and predictions.
+acc.add(tensor([0, 1, 2, 0, 1, 2]), tensor([0, 1, 1, 2, 1, 0]))
+
+Here's another mini batch of inputs and predictions.
+acc.add(tensor([1, 1, 2, 0, 1]), tensor([0, 1, 1, 2, 1]))
+acc.value
+
+And then call .value to calculate the accuracy.
+.value doesn't require parentheses after it because it's a @property.
+A @property is something that just calculates automatically without
+having to put parentheses. 
+
+Each time we call add we are going to be storing that input and that target
+and also the number of items in the mini batch (optionally).
+for now that's just always going to be one.
+We then call .calc which is going to call the accuracy calc, 
+to see how often input and target are equal.
+Then we're going to append to the list of values that calculation.
+And we're also going to append to the list of ns (in this case just one).
+Then to calculate the value, we just do that so that's all that's
+happening for accuracy.
+
+Then for loss we can just use metric directly, because it will just calculate 
+the average of whatever it's passed.
+So we can say, add the number 0.6 so the target's optional,
+and we're saying this is a mini batch of size 32,
+so it's going to be the n and then add the value 0.9 with a mini batch size of 2. 
+And then get the value and that's the
+same as the weighted average of 0.6 and 0.9 with weights of 32 and 2.
+
+So we've created a metric class and we can use it to create
+any metric by overwriting calc.
+Or we could create things from scratch, as long as they have an add and a value.
+
+We're now going to change our learner, keeping the same basic structure.
+There's going to be fit, it's going to go through each Epoch, 
+it's going to call one_epoch() passing in true and false 
+(as for training and validation).
+one_epoch() is going to go through each batch in the dataloader and call one_batch().
+one_batch is going to do the prediction, get loss and if it's training it's going
+to do the backward step and zero grid.
+But there's a few other things going on.
+
+Let's just look at it in use first.
+When we use it we're going to be creating a learner with the model, dataloaders, 
+plus function, learning rate and some callbacks.
+And we call fit and we're going to have charts and stuff.
+The basic idea is very similar.
+We're going to call fit and when we construct it we're going to be passing 
+the same things as before, and one extra thing callbacks.
+Store the attributes as before, and we're going to be doing some stuff with the callbacks.
+
+When we call fit we store how many epochs we're going to do and also the
+actual range that we're going to loop through as self.epoch.
+We're going to create the optimizer using the optimizer function and the parameters
+and then we're going to call _fit because we've created this special
+decorator with callbacks what does that do?
+callbacks is a class it's gonna just store one thing which is the name in this case 
+the name is fit.
+decorators get past a function so it's going to get past this whole function 
+and that's going to be called f.
+__call__ is what happens when a class is treated an object 
+is treated as if it's a function.
+So it's going to get this function so this function is _fit.
+We want to return a different function (it's going to call the
+function that we were asked to call using the arguments 
+and keyword arguments we were asked to use)
+but before it calls that function it's going to call a special method called
+callback, passing in the string before (in this case) _fit.
+After it's completed it's going to call that method called callback,
+passing the string after _fit and it's going to wrap the whole thing 
+in a try except block, looking for an exception called CancelFitException.
+And if it gets one it's not going to complain.
+For example here is a callback
+called deviceCB and before fit will be called automatically
+before that _fit method is called and it's going to put the model
+onto our device Cuda or MPS if we have one.
+
+we're going to call fit it's going to go through these lines of code 
+it's then going to call _fit.
+_fit is this function, so it's going to call our learner.callback passing in before
+_fit and callback is defined here 
+callback is going to be past the string before _fit
+it's going to then go through each of our callbacks sorted based on their order.
+and it's going to look at that callback and try to get 
+an attribute called before_fit.
+Here it will find one and so then it's going to call that method.
+If that method doesn't exist (it doesn't appear at all) then getatrr() will
+return instead identity(), a function that whatever arguments it gets passed 
+it returns them.
+And if it's not past any arguments it just returns.
+
+The best way to learn about these things is to open up this Jupiter notebook and try
+and create really simple versions of things.
+for example, let's try how does identity work.
+I could call it and it gets nothing, I can call it with (1) it gets back 1,
+I could call it with 'a', gets back 'a'.
+To see how is it doing that we can add a break point.
+In our debugger we can hit H to find out what the commands are,
+but you really should do a tutorial on the debugger if you're not familiar with it.
+Then we can step through each one so I can now print args.
+args  is actually a command which will just tell the arguments to any function 
+regardless of what they're called.  
+We can step through by pressing n, and we can check what is X now, etc.
+
+Be familiar with try except blocks, decorators, partial, debugger, getattr.
+Cognitive load Theory says if you're trying to learn something 
+but your cognitive load is high because of all lots of other things going 
+on at the same time you're not going to learn it.
+It's going to be hard for you to learn this framework if you have too much cognitive load.

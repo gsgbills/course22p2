@@ -1,0 +1,197 @@
+Notebook 12 Accelerated SGD.
+Goal above 90 percent accuracy.
+We do our normal Imports and data setup as usual.
+To summarize what we've got: metrics callback, activation stats on the general value 
+so callbacks are going to be the device callback to put it on Cuda or CPU,
+the metrics, the progress bar, the activation stats,
+The activation function is GeneralRelu with 0.1 leakiness and 0.4 subtraction.
+The inner weights `iw` which we need to tell it about how leaky they are.
+If we're doing a learning rate finder we've got a different set of callbacks.
+
+BACK TO INITIALIZING NOTEBOOK
+In initializing, a fun trick you might want to play with,
+In GeneralRelu  added a maximum value `maxv` and if the `maxv` is set then we
+clamp the RELU to be no more than `maxv`, (e.g., 6) so after that the line is flat.
+A nice way to avoid numbers getting too big.
+*TODO a leaky maximum where at the top it is 10 times smaller, 
+just exactly like the Leaky could be.
+Make sure we are still getting zero one layers with the initialization.
+BACK to Accel SGD
+
+Let's create our own SGD class.
+An SGD class needs to know what parameters to optimize.
+The `module.parameters` method returns a generator so we use `list()` to turn that into a list.
+We need to know the learning rate `lr`, and the weight decay `wd`.
+We also want to keep track of what batch number are we up to.
+
+An Optimizer has two things: a `step` and a `zero_grad`.
+`steps()` is doing with `no_grad`, because this is not part of the learn part of the thing 
+that we're optimizing.
+This is the optimization itself through each tensor of parameters.
+And we do a step of the optimizer `.opt_step` and we'll do a step of the regularizer,
+`.reg_step`, and we keep track of what batch number `.i +=1' we're up to.
+
+The `opt_step` subtract out from the parameter its gradient times the `lr`. 
+(that's an SGD optimization step)
+The `zero_grad` goes through each parameter and `zero_` it.
+
+Let's create a trained learner.
+It's a learner with a training callback built-in.
+We're going to set the optimization function to be the `SGD` we just wrote,
+and we'll use the `BatchNorm` model with the weight initialization we've used before.
+If we train it then this should give us basically the same results we've had before.
+
+Regularization: weight decay (L2 regularization):
+let's add the square of the weights to the loss function.
+The only thing we actually care about is the derivative.
+And the derivative of that is equal to the derivative of the loss 
+plus the derivative of the sum of 2W.
+We can do weight decay by taking our gradients and adding on the weight Decay times the weights.
+Since that's part of the gradient then in the optimization step that's
+using the gradient and it's subtracting out gradient times learning rate.
+
+Because we're just doing `p.grad * self.lr` and the `p.grad` update is just to add `wd*weight`,
+we could simply skip updating the gradients.
+Instead directly update the weights to subtract out the `lr*wd*weight`.
+They would be mathematically identical, and that is what we've done in the regularization step `reg_step`.
+If we've got `self.wd` then just take `p *=1 - self.lr*self.wd`
+which is mathematically the same.
+That's why the regularization is inside SGD.
+
+Finished running, got .85 accuracy,  we're able to train at our high lr of 0.4.
+
+Let's add momentum. 
+We had a hacky momentum learner before.
+Momentum should be in an Optimizer. 
+Let's talk about momentum actually is.
+Let's create some data.
+Our X's are going to be 100 equally spaced numbers from -4 to 4.
+Our y's are just going to be minus our X's divided by 3 squared plus some randomization.
+We show what momentum looks like for a range of different levels of momentum.
+Let's take a beta of 0.5 as our first one.
+We're going to do a scatter plot of our x's and y's, the blue dots
+and then we're going to go through each of the Y's.
+We're going to do a lerp.
+We're going to take our previous average (which will start at zero) 
+times beta which is 0.5, plus 1 minus beta that's 0.5 times our new average.
+And then we'll append that to this red line.
+And we'll do that for all the data points and then plot them.
+The red line becomes less bumpy because each one is half this exact
+Dot and half of whatever the red line previously was.
+This is an exponentially weighted moving average.
+We could have implemented this using lerp.
+
+As the beta gets higher it's saying do more of wherever the red line used to be
+and less of where this particular data point is.
+That means when we have outliers the red line doesn't jump around as much.
+But, if our momentum gets too high, it doesn't follow what's going on, it's way behind.
+Momentum is always going to be partially responding to how things were many batches ago.
+Even at beta of 0.9, the red line is offset to the right because it's taking it a while for
+it to recognize that things have changed.
+Because each time it's 0.9 of it is where the red line used to be 
+and only 0.1 of it is what this data point say.
+Momentum is useful because when a loss function is very bumpy,
+we want to be able to follow the actual curve.
+Using momentum we don't quite get that, but we've got a version of that that's offset 
+hopefully following the average of those directions.
+
+To use momentum we will inherit from SGD and we will override the definition of the `opt_step`.
+When we create our momentum object we will tell it what momentum `mom` we want or default it to 0.9.
+Then in the optimization step for each parameter `p` in our model 
+(each layer's weights in each layer's biases),
+we'll find out for that parameter `p` if we ever stored away its moving average of gradients before.
+If we haven't then we'll set them to zero initially. 
+And then we will do our moving average of exponentially weighted gradients 
+is equal to whatever it used to be times the momentum, 
+plus this actual new batches gradients times 1 minus momentum `p.grad*(1-self.mom)`
+That's doing the `leap` as we discussed.
+Then we're going to do as the SGD update step,
+but instead of multiplying by `p.grad` we're multiplying it by `p.grad_avg`
+
+There's a cool trick, we are inventing a brand new attribute, `.grad_avg`,
+putting it inside the parameter tensor and use it to store
+the exponentially weighted moving average of gradients for that particular parameter.
+As we Loop through the parameters we don't have to do any special work to get access to that.
+
+Interesting we can hike the LR up to 1.5, because we're not getting these huge bumps anymore.
+By getting rid of the huge bumps its a lot smoother.
+Previously we got up to .85 because we've gone back to our 1024? for
+batch size and just 3 epochs in a constant LR and we've gone up to .876.
+A loss function that is smooth improved things.
+
+The colordem plot is the smoothest we've seen.
+It's a bit different to the momentum learner because the momentum learner didn't have this one
+minus part right um it wasn't lurping it was it was basically always including all of the
+Grad Plus a bit of the momentum part so this is um yeah this is a
+different better approach I think um and yeah we've got a really nice smooth result.
+
+The person's asking don't we get a similar effect I think in terms of the
+smoothness if we increase the batch size which we do but if 
+you just increase the batch size you're giving it less
+opportunities to update so having a really big batch size is actually not great
+Jan Lecunn thinks that the ideal batch size, if we can, is one, but it's just slow.
+We want to have as many opportunities to update as possible.
+Some people seem to be trying to create really large batch sizes which doesn't make sense.
+We want the smallest batch size we can get away, to give it the most chances to update.
+We've got good results despite using only 3 epochs of very large batch size.
+
+RMSprop updates the optimization step using something very similar to momentum.
+Instead of lerp on the p.grad, lerp on p.grad squared.
+We call it Square mom, but is just the multiplier.
+A large grad squared indicates a large variance of gradients.
+So what we're then going to do is divide by the square root of that plus Epsilon.
+We put the Epsilon outside the square root.
+It does make a difference and so be careful as to how your Epsilon is being interpreted.
+This is a very common cause of confusion and errors.
+We're dividing the gradient by the the amount of variation.
+The square root of the moving average of gradient squared.
+if the gradient has been moving around all over the place then we don't
+know what it is, so we shouldn't do a very big update.
+If the gradient is the same all the time, then we're confident about it,
+so we do want a big update.
+I have no idea why we're doing this in two steps let's just pop this over here
+um now because we are dividing our gradient by this generally possibly rather small number.
+We generally have to decrease the learning rate back to 0.01, and it's training.
+RMSprop can be quite nice, it's a bit bumpy there... 
+could try decreasing it a little bit maybe down to three neg3 instead.
+That's a little better and a bit smoother so that's probably good.
+The colorful Dimension plot looks very nice.
+
+JH decided not to do the initializing to zeros.
+Because if we initialize to zeros then the initial denominator will be zero plus Epsilon,
+and the initial LR will be very high.
+Initialized it at first to whatever the first minibatch gradient is squared.
+This is a useful trick for using RMS prop.
+
+Adding momentum can be a bit aggressive sometimes for some finicky architectures.
+RMSprop can be a good way to get reasonably fast optimization of a finicky architecture.
+For example, *efficientNet* ?? is an architecture which trained best with RMSprop.
+
+Adam is RMSprop plus momentum together.
+We call them beta1 and beta2 they should be called momentum and square momentum or momentum of squares.
+Beta1 is the momentum from the momentum Optimizer, 
+beta2 is the momentum for the squares from the RMSprop optimizer.
+We store those and because RMSprop we need the Epsilon.
+We store the gradient average and the square average, and then we're going to do our lerping.
+
+A trick here is in order to avoid doing this where we put the initial batch gradients as
+our starting values we're going to use zeros as our starting values and then we're going to unbias them.
+For the very first minibatch if we have zero here being lurped with the gradient,
+then the first minibatch will be closer to zero than it should be.
+But we know exactly how much closer it should be to zero, 
+which is self.beta1 times closer.
+At least in the first minibatch because that's what we've worked with.
+The second minibatch it'll be self.beta1 squared,
+and in the third minibatch will be self.beta1 cubed, and so forth.
+That's why we had self.i back in our SGD, keeping track of how many batches were up to,
+We need that in order to do this unbiasing of the average.
+
+Unbiased versions matters for the first few minibatches otherwise it would be too close to zero.
+
+We would expect the learning rate to be similar to what RMSprop needs because we're
+doing that same division so we actually do have the same learning rate here.
+We're up to .865 accuracy, less good than momentum.
+We can fiddle around momentum we had 0.9,  so we can fiddle around with
+different values of beta2 beta1, and see if we can beat the momentum version.
+
+To be continued....

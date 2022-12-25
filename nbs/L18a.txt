@@ -1,0 +1,369 @@
+Lesson 18
+We're going to start today in Microsoft Excel.
+In the xl folder of the course 22P2 repo there's a spreadsheet called graddesc.xml.
+(as in gradient descent).
+The Overview (first) tab describes what's in each sheet.
+We will look at the various SGD accelerated approaches we saw in L17, but done in a spreadsheet.
+We're going to try to solve a linear regression.
+We create our data by arbitrarily choosing a (slope) and b (intercept) (a=2, b=30), 
+randomly generating x, and then calculating y = ax + b. 
+We pretend we don't know the true values of a and b, and see if our optimization algorithms help us find them.
+
+We've got some random numbers in data tab, and we've got the ax plus b calculation.
+We copied and pasted as values one set of those random numbers into the next sheet called basic, which is the basic SGD sheet.
+We're going to try to use SGD to learn that the intercept is 30 and the slope is 2.
+We start with some random guess, so the random guess is going to be a'=1, b'=1.
+For the point, X=14 and Y=58, and our prediction is a'x + b' = 15.
+The answer was Y=58, so we're off.
+Lets use mean squared error, $MSE = (58-15)^2$ which is 1859.
+
+How much would the error change if we changed the intercept (b) just by a little?
+Lets have b1 = b + 0.01 = 30.01, and then calculate Y, and then calculated the difference squared.
+That is the column errb1.
+It's made the error go down a little, it suggests that we should increase the intercept b.
+We can calculate the estimated derivative by taking the change from the actual intercept 
+using the intercept plus 0.01 so that's the raise.
+We divide it by the run which is 0.01 and that gives us the estimated derivative of the squared error with respect to the intercept b.
+It's -85.99.
+We can do the same for a, change the slope by 0.01, calculate the difference and square it,
+and we can calculate the estimated derivative as the difference divided by run which is 0.01.
+That is -1202. 
+In both cases the estimated derivative is negative, suggesting we should increase the intercept and the slope.
+(and we know that that's true because both the intercept and the slope are > 1).
+That is a way to calculate the derivatives, the finite differencing approach.
+Another way is analytically, the derivative of squared is two times the difference and the derivative for the slope is.
+The estimated version using the rows over run and the little 0.01 change and the analytical are pretty similar.
+
+The finite differencing approach we only use it for testing because it's slow,
+as we have to do a separate calculation for every single weight, but it's good for testing.
+We use analytic derivatives all the time in real life.
+We can now calculate a new slope, equal to the previous slope minus the derivative times the learning rate which we set at 0.0001.
+And we do the same thing for the intercept.
+So we have in columns N and m the new a and b.
+We can use them for the second row of data: x=86, y=202 a'=1.12 b'=1.01
+
+Here we are using the formula to point at the intercept and slope and we can get 
+a new prediction, and squared error, and derivatives and then we can get another new slope and intercept.
+Strictly speaking this is not a minibatch gradient descent as we normally do in deep learning.
+It's a simpler version where every batch is is of size one. 
+Still stochastic gradient descent, sometimes called online gradient descent.
+We go through every data point in our small dataset until we get to the very end.
+At the end of the first epoch we've got an intercept of 1.06 and a slope of 2.57, 
+better estimates than our starting estimates of 1 1. 
+
+Now we would copy our slope and intercept (to C1 and C2) and go through the entire Epoch again.
+Then we get another interception slope..
+We could keep copying and pasting and copying and pasting again and again.
+We see the root main squared error going down.
+To avoid copying and pasting we fire up Visual Basic for applications
+to create a macro where the reset button sets the slope and constant to 1.
+And the Run button is going to go through 5 times calling onestep.
+one-step is going to the last slope to the new slope, and the last constant intercept to the new constant intercept,
+and also do the same for the rmse.
+And it's going to paste the RMSE down to the bottom. 
+When we click reset and then run, it's run at five times, and each time it's posted the rmse.
+And here's a chart showing RMSE going down. 
+We could keep running another five so it is doing copy paste 5 times.
+The rmse is very slowly going down and the intercept and slope are very slowly getting closer to where they should be.
+
+Big issue is that the intercept is 30, it's going to take a long time to get there,
+But it will get there eventually if we click run enough times.
+Or we could maybe set the VBA macro more than five steps at a time.
+It's taking a linear route every time these are increasing.
+Why not increase it by more and more? That is what momentum does.
+
+Next sheet we show momentum. Everything's exactly the same as
+the previous sheet but this sheet we didn't bother with the finite differencing
+we just have the analytic derivatives which are the same.
+The data is the same, the slope and intercept are the same starting points as last time.
+But this time we've added a momentum term, beta.
+
+This cell is taking the gradient and it's using that to update the weights,
+but it's also taking the previous update, e.g., -25 multiplied by 0.9 the momentum.
+The derivative is then multiplied by 0.1 so this is momentum which is getting a little bit of each.
+We then use that instead of the derivative to multiply by our learning rate.
+We keep doing that again, so we are calculating the momentum "lurped version" of the gradient for both b and for a.
+
+When we keep moving in the same direction (here the derivative is repeatedely negative) it gets higher and higher. 
+Particularly with this big jump we keep getting big jumps because there's still negative gradient.
+The new b and a jumped ahead and so we can click run repeatedely and it's moving faster than it was before.
+
+To use VBA (Visual Basic for applications) you can hit alt or option f11 to to open it.
+May need to go into Excel preferences and turn on the developer tools so that you can see it.
+We can also right click and choose assign macro on a button, and you can see what macro has been assigned.
+If I hit alt f11 and I can just dab (or double click on the sheet name) it'll open VBA up and you
+can see it is the same as the previous one.
+One difference is that to keep track of momentum at the very end so I've got my
+momentum values going all the way down the very last momentum
+I copy back up to the top each Epoch so that we don't lose track of the Optimizer state.
+ 
+RMSprop
+Similar to momentum but instead of keeping track of a lurped moving average
+and exponential moving average of gradients we're keeping track of a moving average of gradient squared.
+Rather than simply adding that as the gradient, we are dividing our gradient by the square root of that.
+If there's very little variation going on in your gradients then you probably want to jump further.
+ 
+Adam 
+Adam is a combination of the lurped version of the gradient and the lurped version of the gradient squared.
+We do both when we update we're dividing the gradient by the square root of the 
+lerped moving averages and we're also using the momentumized version.
+We go through that each time, we reset run and it jumped quickly to 2 and 30, in just two sets, 10 epochs.
+If we keep running it it's jumping up and down between the same values.
+So we need to decrease the learning rate at that point.
+Now it's jumping up and down between the same two values again so decrease the learning rate a little bit more.
+This gives an intuitive feeling for what training looks like.
+
+Q: How is J33 being initialized? 
+We take these last four cells and we copy them to here as values.
+This is what those looked like in the last Epoch.
+If we're going to copy and then paste as values, then this here just refers back to them.
+
+Interesting that they're opposites of each other, which is fluctuating around the actual Optimum at this poin.
+
+Adam looks the same except now we have to copy and paste  both our momentums and our squared gradients,
+and the slopes and intercepts at the end of each step.
+When we reset it sets everything back to their default values.
+
+Manually changing the learning rate seems pretty annoying.
+We can use a scheduler, but a scheduler is something we set up ahead of time.
+It it possible to create an automatic scheduler?
+JH created an adam annealing tab, but never got back to experimenting with it...
+(if anybody's interested they should check this).
+JH used the Adam spreadsheet but added an extra thing, automatically decreased the learning rate in a certain situation.
+It decreased it when he kept track of the average of the squared gradients,
+and anytime the average of the squared gradients decreased during an Epoch,
+he stored it, kept track of the the lowest squared gradients.
+If that resulted in the squared gradients average halving then would decrease the learning rate by a factor of four. 
+I was keeping track of this gradient ratio.
+
+When you see a range can find what that's referring to by clicking up here and finding gradient ratio and there it is.
+That its equal to the ratio between the average of the squared gradients versus the minimum that we've seen so far.
+That is JH theory as you train you get into flatter more stable areas, 
+and that's a sign to decrease the learning rate.
+If I hit run again it jumps straight to a pretty good value,
+but I'm not going to change the learning rate manually,
+I just press run and you can see it's changed the learning rate automatically now.
+If I keep hitting run the learning rates got lower and got almost the right answer.
+
+TODO: try experiments to create a an automatic annealer using miniAI.
+
+Annealing
+so we've seen it manually before where we've just where we've just decreased the learning rate in a notebook, 
+and we've seen something in Excel.
+Let's look at Pytorch in the same 12_accel_sgd notebook, the accelerated SGD notebook.
+We've re-implemented all the main optimizers from scratch, so we can use Pytorch's.
+Let's see how we can do our own learning rate scheduling or annealing within the mini AI framework.
+When we implemented the learning rate finder we saw how to create something that adjusts the learning rate.
+(Notebook 09_Learner) that we had to go through the optimizers parameter groups and in each group set
+the learning rate to times equals some multiplayer.
+```Python
+for g in learn.opt.param_groups: g['lr'] *= self.lr_mult
+```
+That was for the learning rate finder.
+Since we know how to do that we're not going to bother re-implementing all the schedulers from scratch. 
+
+Instead we look inside the torch `lr_scheduler` module, and see what's defined in there.
+We can hit Dot Tab and see what's in there.
+Another way is to use `dir(lr_scheduler)` because it tells us everything inside a python object.
+This particular object is a module object, so it tells us all the stuff in the module.
+When we use the dot version tab it doesn't show you stuff that starts with an `_` because that is considered private.
+
+We see from that the things that start with a capital and then a small letter look like the things we care about.
+We probably don't care about those that start with `_`, etc.
+We can just do a list comprehension that checks that the first letter is an uppercase and the second letter is lowercase 
+and then join those all together with a space.
+This is a list of all of the schedulers that Pytorch has available...
+(JH couldn't find such a list on the pytorch website documentation).
+A handy thing to have available.
+
+So here are various schedules we can use, lets experiment with `CosineAnnealingLR`.
+NB: these pytorch schedulers work with pytorch optimizers not with custom SGD class.
+and Pytorch optimizers have a slightly different API.
+We might learn how they work, so we need an Optimizer.
+An easy way to grab an Optimizer is to create a learner and pass in the 
+`SingleBatchCB` callback that we created in notebook 9.
+```Python
+class SingleBatchCB(Callback):
+    order=1
+    def after_batch(self, learn): raise CancelFitException()
+```
+It cancels the fit, so it just does one batch.
+
+And we could `fit` and from that we've now got a learner and an optimizer.
+We can do the same thing to the Optimizer to see what attributes it has.
+or just read the Pytorch documentation. 
+As expected it's got the `step` and the `zero_grad`. 
+
+Or we can just type opt.
+Pytorch optimizers have a "repra"? which means we can just type it in 
+hit shift enter and we can see the information about it this way.
+
+An Optimizer it'll tell you what kind of Optimizer it is.
+In this case the default Optimizer for the learner we decided was optim.sgd.SGD.
+The SGD Optimizer has parameter groups, (we only have one parameter group here 0),
+i.e., all of our parameters are in this group 0.
+
+Let's grab all of our parameters, that's a generator, so we have to turn it into an iterator 
+and call next to give us our first parameter.
+We can check the `.state` of the optimizer, which is a dictionary whose keys are parameter tensors.
+Normally we use numbers or strings as keys, but we can use tensors as keys.
+Here `param` is a tensor parameter, a tensor which it `requires_grad`.
+We're actually using that to index into the `state` dictionary where the keys are parameters.
+
+In Miniai we had each parameter, we stored as attributes: its state, the average of the gradients 
+or the exponentially weight of moving average gradients and of squared averages.
+Pytorch doesn't store them as attributes, but instead the optimizer has a dictionary 
+where we can look up using a parameter as key.
+That returns the state.
+
+This is the exponentially weighted moving averages and because we haven't done any
+training yet and because we're using non-momentum STD SGD it's none.
+That's how it would be stored by Pytorch.
+
+JH liked just storing the state directly as attributes but this way works as well.
+In SGD we stored the parameters directly but in pytorch those parameters can be put into groups.
+Since we haven't put them into groups the length of param groups is one,
+and that group contains all of our parameters.
+
+`pg` is a dictionary it's a parameter group.
+To get the keys from a dictionary you can just listify, that gives us back the keys.
+This is one quick way of finding out all the keys in a dictionary.
+We can see all the parameters in the group: the hyper parameters the learning rate the momentum weight Decay etc.
+
+Q: isn't indexing by a tensor just like passing a tensor argument to a method?
+A: no it's not the same. This is how the Optimizer stores State about the parameters.
+It has to be stored somewhere.
+MiniAI we stored as attributes on the parameter, but Pytorch optimizers store it as a dictionary.
+
+Let's look at how schedulers work. 
+Let's create a cosine annealing scheduler.
+To a scheduler in Pytorch we have to pass it the optimizer.
+We want to be able to tell it to change the learning rates of our Optimizer,
+so it needs to know what Optimizer to turn and then change the learning rates of.
+It can then do that for each set of parameters.
+The reason that it does it by parameter group is that for things like transfer learning we
+often want to adjust the learning rates of the later layers differently to the earlier layers.
+That's why we have different groups with different learning rates, momentums, etc.
+
+The scheduler needs to know how many iterations we're going to do,
+it needs to know how far to step each time.
+We're going to do 100 iterations so the scheduler is going to store the base learning rate, `base_lrs`,
+which it got from ther optimizer, as the starting lr.
+The `base_lrs` is a list because there could be a different one for each parameter group.
+We can get the most recent `get_last_lr` from the scheduler which is the same.
+
+There in no method in Pytorch to plot a scheduler's lrs...
+`sched_lrs` creates a list, set it to the last learning rate of the scheduler,
+which is going to start at 0.06 and then goes through `steps`.
+`sched.optimizer.step()` steps the optimizer.
+`sched.step()` causes the scheduler to adjust its learning rate.
+Then `lrs.append` that new learning rate to a list of learning rates.
+Finally plot it.
+
+I've intentionally gone over 100 because I had told it I'm going to do 100...
+The learning rate if we did 100 iterations would start high for a while,
+it would then go down and then it would stay low for a while.
+If we intentionally go past the maximum it's going up again because this is a cosine curve.
+
+Example of how to investigate (in a repo environment like a notebook) how an object behaves, what's in it, etc.
+We always want to do when using something from an API we are not familiar with.
+See what's in it, see what they do, run it totally independently, plot anything we can plot.
+This is to learn about the stuff we work with.
+We can't rely on using the same classes and apis every day.
+We have to be good at exploring them and learning about them.
+
+Scheduler Callback
+A scheduler callback is something we're going to pass in the scheduling callable.
+When we create the scheduler we have to pass in the optimizer to schedule.
+`before_fit` that's the point at which we have an Optimizer, we will create the scheduling object `schedo`.
+The scheduling object we create by passing the optimizer `learn.opt` into the scheduler callable.
+Then when we do `step`, check if we're training and if so we'll `step`.
+
+`after_batch` will call `step`, if we want the scheduler to update the learning rate every batch.
+We could also have an Epoch scheduler callback which we'll see later.
+
+To see what this schedule is doing we need a new callback to keep track of what's going on in the learner.
+We could create a `RecorderCB` callback.
+We're going to be passing in the name of the thing that we want to keep track of in each batch,
+and a function which is going to be responsible for grabbing the thing that we want.
+
+The function `_lr` is going to grab from the `cb` Callback look up its param groups property
+and grab the learning rate `lr`. 
+The `pg` attribute came from? 
+`before_fit` the `RecorderCB` is going to grab just the first parameter group,
+We've got to pick some parameter group to track so we'll just grab the first one.
+
+We're going to create a dictionary `.recs` of all the things that we're recording.
+So we'll get all the names (in this case just lr).
+Initially `.recs` is going to be an empty list.
+Then `after_batch` we'll go through each of the items in that dictionary (here just LR).
+`lr` is the key and `_lr` function is the value.
+And we will append to that list, call that method/function or callable and pass in this callback.
+and that's why this is going to get the Callback.
+
+We have a whole bunch of dictionary of results `recs[k]` of these functions after each batch during training.
+We'll just go through and plot them all, and lets what it looks like.
+Let's create a cosine annealing callable.
+We're going to have to use a partial to say that this callable is going to have `T_Max=` 
+3 times however many batches we have in our data loader, because we're going to do 3 epochs.
+
+We set it running and we're passing in the batch scheduler `BatchSchedCB(sched)` with the `sched` scheduler callable.
+We're also going to pass in our recorder callback, `RecordCB` saying we want to track the learning rate using the `_lr` function.
+And we call `fit()`, and accuracy is getting close to .90 now in only three epochs which is impressive.
+
+We then call `rec.plot`, to plots the learning rate.
+
+We can do the same thing but replace `after_batch` with `after_epoch` and this will now
+become a scheduler which steps at the *end of each epoch* rather than at the end of each batch.
+We can do the same thing using an Epoch scheduler, with `TMax = 3` because we're only going to
+be stepping 3 times, we're not stepping at the end of each batch, just at the end of each epoch.
+Again trains and we can call `rec.plot` after it trains, and it's just stepping three times.
+
+We're digging deeply to understand what's happening in our models,
+to look at all the activations, losses, learning rates, etc.
+We've built all this from scratch.
+
+Lets take a look at One cycle training. 
+We can replace our scheduler with Pytorch one cycle learning rate scheduler `OneCycleLr`.
+We make it a batch scheduler, and we're going to train 5 epochs, and get .906.
+
+here's the plot and 2 things are being plotted because we passed into the recorder callback 
+a plot of learning rates and also a plot of momentums.
+`rec = RecorderCB(lr=_lr, mom=_beta1)`
+Momentums its going to grab from `cp.pg['betas'][0]`.
+For Adam it's called beta0 and beta1 is momentum of the gradients squared.
+The one cycle is starting the learning rate very low, and going up to high and then down again.
+But the momentum is starting high and then going down and then up again.
+
+Starting out at a low learning rate is important if you have a not perfectly initialized model 
+(which almost everybody almost always does).
+There are a lot of models that get more complicated and eventually 
+people figure out how to initialize more complex models properly.
+For example a paper in 2019 figured out how to initialize resnets properly.
+They discovered when they did that they did not need batchNorm and they could train
+networks of 10000 layers and get state-of-the-art performance.
+There's actually been something similar for Transformers called T-Fixup.
+It is difficult to initialize models correctly.
+Most people fail to ost people fail to realize that they don't need tricks warmup and batchNorm 
+if they do initialize them correctly.
+T-Fixup explicitly looks at the difference between no warm-up versus with warm-up 
+with their correct initialization versus with normal initialization.
+Their pictures are log scale histograms of gradients they're very similar to the colorful Dimension plots.
+ColorDimension are easier to read but 'T-Fixup` plots are prettier.
+
+We do a a warm up if the Network is not initialized correctly.
+Starting at a very low learning rate means it's not going to jump off
+way outside the area where the weights even make sense.
+Then gradually increase them as the weights move into a part of the space that does make sense. 
+And then during that time, while we have low learning rates, 
+if they keep moving in the same direction, then with this very high momentum they'll move more and more quickly.
+
+But if they keep moving in different directions, the momentum is going to look at the underlying Direction
+they're moving.
+Once we got to a good part of the weight space we can use a high LR, 
+and with a very high learning rate you wouldn't want so much momentum.
+
+The excel spreadsheet did this automatically, as you get closer to the optimal you generally want
+to decrease the learning rate and since we're decreasing it again we can increase the momentum.
+Starting from random weights we've got a pretty good accuracy on fashion mnist 
+with a standard convolutional neural network, everything built from scratch.

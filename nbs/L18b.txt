@@ -95,7 +95,6 @@ a big improvement with the only difference to our previous model is line of code
 which allowed us to go `nfs=(8,16,32,64,128)`.
 A small change but  the error rates gone down by over 10 percent.
 
-
 Now we're going to make it deeper. 
 But there comes a point where making neural Nets deeper stops working well.
 Even with good initialization there comes a time where adding more layers becomes problematic.
@@ -251,402 +250,315 @@ A thoughtfully designed basic architecture goes a very long way.
 It's better for this problem than any of the Pytorch image model resnets.
 It shows that we can create a state-of-the-art architecture by using common sense.
 
-XXXX
+
 NB 14_augmentation.
 
-We're not done yet because we haven't even talked about data augmentation.
-let's keep going so we're going to make everything the same as before but before we do data
-augmentation we're going to try to improve our model even further if we can
-so I said it was kind of not constructed with any great care and thought really like in terms of like
-this resnet we just took the confnet and replaced it with a resnet so it's
-effectively twice as deep because each conv block has two convolutions but
-resnets train better than conf Nets so surely we
-could go deeper and wider still so I thought okay how could we go
-wider and I thought well let's take our model
-and previously we were going from eight up to 256. what if we could get up to 512.
-and I thought okay well one way to do that would be to make our very first res
-block not have a kernel size of three but a kernel size of five so that means that each grid is going to
-be five by five that's going to be 25 inputs so I think it's fair enough then to have 16 outputs
-so if I use a kernel size of 5 16 outputs then that means if I keep
-doubling as before I'm going to end up at 512. rather than 256.
-okay so that's the only change I made was to add KS equals 5 here and then
-change to double or the sizes
-and so if I train that wow look at this 92.7 percent
-so we're getting better still um and again it wasn't with lots of like
-trying and failing and whatever it was just like saying well this just makes sense 
-and the first thing I tried it just it just worked you know we're just
-trying to use these sensible thoughtful approaches okay the next thing I'm going to try
-isn't necessarily something to make it better but it's something to make our res net more flexible our current resnet
-is a bit awkward in that the number of stride two layers has to be exactly big
-enough that the last of them
-that the last of them ends up with a one by one output so you can flatten it and
-do the linear so that's not very flexible because you know what if you've got something you know for different
-size 28 by 28 is a pretty small image so to me to kind of make that necessary
-I've created a get model 2. which goes less far it has one less
-layer so it only goes up to 256 despite starting at 16. and so because it's got one less layer
-that means that it's going to end up at the two by two not the one by one
-so what do we do um well we can do something very straightforward which is we can take the mean
-over the two by two and so if we take the mean over the two by two that's going to give us
-a mean over the two by two it's going to give us batch size by Channel's output which is what we can then put into our
-linear layer so this is called this ridiculously
-simple thing it's called a global average pooling layer and that's the that's the Keras term
-in pi torch it's basically the same it's called an Adaptive average pooling layer
-but in in pi torch you can cause it to have an output other than one by one
-but nobody ever really uses it that way so they're basically the same thing this
-is actually a little bit more convenient than the pi torch version because you don't have to flatten it
-um so this is global average pooling so you can see here after our last res block which gives us a two by two output
-we have global average pool and that's just going to take the mean
-and then we can do the linear batch Norm as usual so
-um I wanted to improve my summary patch to include not only
-the number of parameters but also the approximate number of Mega flops so a
-flop is a floating operation per second a floating Point operation per second
-um I'm not going to promise my calculation is exactly right I think the basic idea is right I just basically
-actually calculated it's not really a flops I actually counted the number of multiplications
-um so this is not perfectly accurate but it's pretty indicative I think so this is the same summary I had before but I
-hadn't added an extra thing which is a flops function where you pass in the weight Matrix and
-the height and the width of your grid now if the
-a number of dimensions of the weight Matrix is less than three then we're just doing like a linear layer or
-something so actually just the number of elements is the number of flops um because it's just a matrix multiply
-but if you're doing a convolution so the dimension is four then you actually do that Matrix multiply for everything in
-the height by width grid so that's how I calculate this kind of flops equivalent
-number so um
-okay so if I run that on this model we can now see our number of parameters
-compared to the resnet model has gone from
-1.2 million up to 4.9 million and the reason why is
-because we've got this um
-we've got this res block it gets all the way up to 512. and the
-way we did this um is we made that a Australian one layer
-so that's why you can see here it's gone two to two and it stayed at two two so I wanted to make it as similar as possible
-with the last ones it's got you know the same 512 final number of channels and so most
-of the parameters are in that last block for the reason we just discussed
-um interestingly though it's not as clear for the Mega flops you
-know it is the greatest of them but you know in terms of number of parameters I
-think this has more parameters than all the other ones added together by a lot but that's not true of Mega flops and
-that's because this first layer has to be done 28 by 28 times
-where else this layer only has to be done two by two times anyway so I tried uh training that
-and got pretty similar result 92.6
-um and that kind of made me think oh let's fiddle around with this a little bit more
-um to see like what kind of things would reduce the number of parameters and the mega flots
-the reason you care about reducing the number of parameters is that it has lower memory requirements and the reason
-you require you want to reduce the number of flops is it's less compute
-so in this case what I've done here
-is I've removed this line of code
-so if we move the line of code that takes it up to 512 so that means we don't have this layer anymore
-and so the number of parameters has gone down from 4.9 million down to 1.2
-million not a huge impact on the mega flops but a huge impact on the parameters we've
-reduced it by like two-thirds or three quarters or something um by getting rid of that and you can
-see that the um
-if we take the very first resnet block the number of parameters is you know why
-is it this 5.3 megaflops it's because although the very first one starts with just one channel the first con remember
-our resnet blocks have two Commons so the second conv is going to be a 16 by 16 by five by five
-and again I'm partly doing this to show you the actual details of this architecture but I'm partly showing it
-so that you can see how to investigate exactly what's going on in your models and I really want you to try these
-so if we train that one interestingly even though it's only a quarter or something of the
-size we get the same accuracy 92.7
-so that's interesting can we make it faster
-well at this point this is the obvious place to look at is this first res net block
-because that's where all the mega flops are and as I said the reason is because it's got two cons the second one is 16
-by 16. um channels 16 channels in 16 channels out
-and it's doing these five by five kernels and it's having to do it across the
-whole 28 by 28 grid so that's the bulk of the the biggest compute so what we
-could do is we could replace this res block with
-just one convolution and if we do that then you'll see that
-we've now got rid of
-the 16 by 16 by 5 by 5. we just got the 16 by 1 by 5x5 so the number of Mega
-flops has gone down from 18.3 to 13.3
-the number of parameters hasn't really changed at all right because the number of parameters was only 6 6 800 right so
-be very careful that when you see people talk about oh my my model has less parameters that doesn't mean it's faster
-okay really doesn't necessarily I mean it doesn't doesn't mean that at all there's no particular relationship
-between parameters and speed even counting Mega flops doesn't always work that well because it doesn't take
-account of the amount of things moving through memory um
-but you know it's not a it's not a bad approximation here um so here's one which has got much less
-Mega flops and in this case it's about the same accuracy as well so
-I think this is really interesting we've managed to build a model that has far
-less parameters and far less Mega flops and has basically exactly the same accuracy so I think
-that's a really important thing to keep in mind and remember this is still way better
-than the resnet 18d from Tim um
-so we've built something that is fast small and accurate
-so the obvious question is what if we train for longer and the answer is if we train for longer
-if we train for 20 a plugs so I'm not going to wait have you wait for it the training accuracy
-gets up to 0.999 but the validation accuracy is worse
-it's 0.924 um and the reason for that is that after
-20 epochs it's seen the same picture so many times it's just memorizing them and so once you start memorizing
-things actually go downhill um so we need to regularize now something
-that we have claimed in the past can regularize is to use weight decay
-but here's where I'm going to point out that weight Decay doesn't regularize at all if you use batch Norm
-and it's fascinating for years people didn't even seem to notice this and then somebody I think finally wrote a paper that pointed this out and people like oh
-wow that's weird um but it's really obvious when you think about it a batch Norm layer has a single
-set of coefficients which multiplies an entire layer right so that set of coefficients could
-just be you know the number 100. in every place and that's going to
-multiply the entire previous weight Matrix you know or convolution kernel matrix by 100.
-as far as weight Decay is concerned that's not much of an impact at all
-because the batch Norm layer has very few weights so it doesn't really have a huge
-impact on weight decay but it massively increases the effective scale
-of the weight Matrix so batch Norm basically lets the the
-near on that cheat by increasing the coefficients the the
-parameters even nearly as much as it wants indirectly just by changing the batch normally as weights
-so weight decay is not going to save us
-um and that's something really important to recognize weight Decay is not I mean
-with batch Norm layers I don't see the point of it at all it does have some like there's been some studies of what
-it does and it does have some weird kind of second order effects on the learning rate but I don't think you should rely
-on them you should use a scheduler for changing the learning rate rather than weird second order effects caused by weight decay so instead we're going to
-do data augmentation which is where we're going to modify every image a
-little bit by a random change so that it doesn't see the same image each time
-so um there's not any particular reason to implement these from scratch to be
-honest we have implemented them all from scratch in fast AI so you can certainly
-look them up if you're interested um but it's actually a little bit separate
-to what we're meant to be learning about so I'm not going to go through it um but yeah if you're interested going
-to fast AI vision augment
-and you'll be able to see for example how do we do flip
-and you know it's just like x dot transpose okay which is not really yeah it's not
-that interesting um
-yeah how do we do cropping and padding how do we do random crops so on and so
-forth okay so we're just gonna actually you know fast AIS have probably got the best implementation of these but torch
-Visions are fine so we'll just use them
-um and so we've created before
-a batch transform callback and we used it for normalization if you
-remember so what we could do is we could create a
-transform batch function which transforms the inputs and
-transforms the outputs using two different functions
-so that would be an augmentation callback and so then you would say okay for the transform batch function for example in
-this case we want to transform our X's and how do we want to transform our X's
-and the answer is we want to transform them using
-this module which is a sequential module of first of all doing a random crop and
-then a random horizontal flip now it seems weird to randomly crop a 28 by 28
-image to get a 28 by 28 image but we can add padding to it and so effectively it's going to randomly add padding on
-one or both sides to do this kind of random crop one thing I did do to change the batch
-transform callback can't remember if I've mentioned this before but something I changed slightly
-since we first wrote it is I added this untrain and on validate
-so that it only does it if you said I want to do it on training and it's training or I want to do it on
-validation and it's not trading and then this is this is all the code is
-um so um data augmentation generally speaking shouldn't be done on validation so we
-set on validation false okay so
-what I'm going to do first of all is I'm going to use our classic single batch CB trick and fit in fact even better oh yeah fit
-fit one uh just doing training and what I'm going to do then is after I
-fit I can grab the batch out of the learner
-and this is a way this is quite cool right this is a way that I can see exactly what the model sees
-right so this is not relying on on any you know approximations remember when we
-fit it puts it in the batch that it looks at into learn.batch so if we fit for a single batch
-we can then grab that batch back out of it and we can call show images
-and so here you can see this little crop it's added now something you'll
-notice is that every single image in this batch and I'll just grab the first 16s I don't want to show you 1024 has
-exactly the same augmentation and that makes sense right
-because we're applying a batch transform now why is this good and why is it bad
-it's good because this is running on the GPU
-right which is great because nowadays very often it's really hard to get enough CPU to feed your fast GPU fast
-enough particularly if you use something like kaggle or collab that are really underpowered for CPU particularly kaggle
-so this way all of our Transformations all of our augmentation is happening on the GPU
-um on the downside it means that there's a little bit less variety every mini batch
-has the same augmentation I don't think the downside matters though because it's going to see lots of mini batches so the
-fact that each mini batch is going to have a different augmentation is actually all I care about so we can see that if we run this
-multiple times you can see it's got a different augmentation in each mini batch
-okay so I decided actually I just going to use
-one padding so I'm just going to do a very very small amount of data augmentation and I'm going to do 20 epochs
-using one cycle learning rate and so
-this takes quite a while to train so we won't watch it but check this out we get to
-93.8 that's pretty wild
-um yeah that's pretty wild so I actually went on Twitter and I said to the entire
-world on Twitter you know which if you're watching this in 2023 if Twitter doesn't exist yet ask
-somebody tell you about what Twitter used to be hopefully it still does um uh can anybody beat this
-in 20 epochs you can use any model you like any Library you like
-and nobody's got anywhere close um so this is um this is pretty amazing and
-actually you know when I had a look at papers with code
-there are you know well I mean you can see it's right up there right with the
-kind of best models that are listed certainly better than these ones
-um and the the better models all use you know 250 or more epochs
-um so yeah if anybody I I'm hoping that some somebody watching this will find a
-way to beat this in 20 epochs that would be really great um because as you can see we haven't really done anything very
-amazingly weirdly clever it's all very very basic um and actually we can uh go even a bit
-further than 93.8 um um just before we do I mentioned that
-since this is actually taking a while to train now I can't remember it takes like 10 to 15 seconds per
-Epoch so you know you're waiting a few minutes you may as well save it so you
-can just call torch.save on a model and then you can load that back later
-foreign so something that can um
-make things even better is something called test time augmentation I guess I should write this out properly here test
-text test time augmentation
-um now test time augmentation actually um does our batch transform callback on
-validation as well and then what we're going to do is we're actually in this case we're going to do
-just very very very simple test time augmentation which is we're going to
-um add a batch transform callback that runs on validate and it's not random but it actually just does a horizontal flip
-non-random so it always does a horizontal flip and so check this out what we're going to do is we're going to
-create a new callback called capture preds and after each batch it's just going to
-append to a list the predictions and it's going to append to a different list
-the targets and that way we can just call learn.fet train equals false and it
-will show us the accuracy okay and this is just the same number that we saw before
-but then what we can do is we can call it the same thing but this time with a different callback
-which is with the horizontal flip callback
-and that way it's going to do exactly the same thing as before but in every time it's going to do a horizontal flip
-and weirdly enough that accuracy is slightly higher which that's not the interesting bit the interesting bit is
-that we've now got two sets of predictions we've got the sets of predictions with the non-flipped
-version we've got the set of predictions with the flipped version and what we could do
-is we could stack those together and take them in so
-we're going to take the average of the flipped and unflipped predictions and that gives us
-a better result still 94.2 percent so why is it better it's because looking at
-the image from kind of like multiple different directions gives it more opportunities to try to understand what
-this is a picture of and so in this case I'm just giving it two different directions which is the flipped and
-unflipped version and then just taking their average
-um so yeah this is like a really
-um nice little trick um Sam's pointed out it's a bit like random Forest which is true it's a kind
-of bagging that we're doing we're kind of getting multiple predictions and and bringing them together
-um and so we can actually um so 94.2 I think is is is my best 20
-epoch result and notice I didn't have to do any additional training so it still
-counts as a 20 Epoch result um you can do test time augmentation where
-you do you know what much wider range of different augmentations that you trained with and then you can use them at test time as well you know more more crops or
-rotations or warps or whatever now I want to show you one of my favorite
-data augmentation approaches which is called random erasing
-um So Random erasing I'll show you what it's going to look like
-random erasing we're going to add a little we're going to basically delete
-a little bit of each picture and we're going to replace it with some
-random gaussian noise now in this case we've just got one patch but eventually we're going to do
-more than one patch so I wanted to implement this because remember we have to implement everything from scratch and
-this one's a bit less trivial than the previous transforms so we should do it from scratch and also not sure there's
-that many good implementations Russ Whiteman's term I think has one so and it's also a very good exercise to see
-how to implement this from scratch um so let's grab
-a batch out of the training set and let's just grab the first 16 images
-and so then let's grab the mean and standard deviation okay and so what we want to do is we
-wanted to delete a patch from each image but rather than deleting
-it deleting it would change the statistic the statistics right if we set those order zero the mean and standard
-deviation are now not going to be zero one anymore but if we replace them with exactly the
-same mean and standard deviation pixels that the picture has or that our data
-set has then it won't change the statistics so that's why we've grabbed the mean and standard deviation and so
-we could then try grabbing let's say we want to delete 0.2 so 20 of the height and width
-then let's find out how big that size is so 0.2 of the shape is the height and of
-the width that's the size of the X and Y and then the starting point we're just
-going to randomly grab some starting point right so in this case we've got the
-starting point for X is 14 starting point for y is zero and then it's going to be a five by five spot
-and then we're going to do a gaussian or normal initialization of our mini batch
-everything in the batch every channel for this x slice this y slice and we're
-going to initialize it with this mean and standard deviation normal random
-noise and so that's what this is so it's just that tiny little bit of
-code so you'll see I don't start by writing a function
-I start by writing single lines of code that I can run independently and make
-sure that they all work and then I look at the pictures and make sure it's working now one thing that's wrong here is that
-you see how the different you know this looks black and this looks gray now at first this was confusing me as to what's
-going on what's the change because the original images didn't look like that and I realize the problem is that the
-minimum and the maximum have changed it used to be from negative 0.8 to 2 that
-was the previous Min and Max now it goes from negative three to three
-so the noise we've added has the same mean and standard deviation but it
-doesn't have the same range because the pixels were not normally distributed originally so normally distributed noise
-actually is wrong so to fix that I created a new version
-and I'm putting in a function now does all the same stuff
-as before as I just did before but it clamps the random pixels to be between Min and
-Max and so it's going to be exactly the same thing but it's going to make sure that it doesn't change the the range that's
-really important I think because changing the rate the range really impacts your you know your
-activations quite a lot so here's what that looks like and so as you can see now all of the backgrounds
-have that nice black and it's still giving me random pixels
-and I can check and because I've done the clamping you know and stuff the main and standard deviation aren't quite zero
-one but they're very very close so I'm going to call that good enough and of course the Min and Max haven't changed because I clamped them to ensure
-they didn't change so that's my random erasing so that randomly erases one block
-and so I could create a random arrays which will randomly choose up to in this
-case four blocks so with that function oh that's annoying it happened to be
-zero this time okay I'll just run it again this time
-it's got three so that's good so you can see it's got oh maybe that's four one two three four blocks
-okay so that's what this data augmentation looks like
-so we can create a class to do this data augmentation so you'll pass in what percentage
-to do in each block what the maximum number of blocks to have is store that away
-and then in the forward we're just going to call our random arrays function passing in the input and passing in the
-parameters um great so now we can use
-um random crop random flip and round arrays
-um make sure it looks okay and so now we're going to go all the way up to 50 epochs
-and so if I run this for 50 epochs I get
-94.6 isn't that crazy
-um so we're really right up there now up we're even above this one
-so we're somewhere up here and this is like stuff people write papers about from 2019 2020
-oh look here's the random erasing paper that's cool
-um so they were way ahead of their time in 2017. but yeah that would have trained for a
-lot longer
-now I was having a think and I realized something
-which is like why like how do we actually get the correct
-distribution right like in some ways it shouldn't matter but I was kind of like bothered by this thing of like well we
-don't actually end up with zero one and this kind of like clamping it all feels a bit weird like how do we actually
-replace these pixels with something that is guaranteed to be the correct distribution
-and I realized there's actually a very simple answer to this which is we could copy another part of the picture over to
-here if we copy part of the picture we're guaranteed to have the correct distribution of pixels
-and so it wouldn't exactly be random or raising anymore that would be random copying now
-I'm sure somebody else has invented this I mean you know I'm not saying this nobody's ever thought of this before so
-if anybody knows a paper that's done this please tell me about it but I you know I think it's
-um it's a very sensible approach and
-it's very very easy to implement so again we're going to implement a door manually right so let's create get our X
-Mini batch and let's get our again our size and again let's get the X Y that we're
-going to be raising but this time we're not erasing we're copying so we'll then randomly get a different X Y to copy
-from and so now it's just instead of in it random noise we just say replace this
-slice of the batch with this slice of the batch
-and we end up with you know you can see here it's kind of copied
-little bits across some of me can't really see it all and some of you can because I think some of
-them are black and it's replaced black but I guess it's knocked off the end of this shoe added a little bit extra here a little bit extra here
-um so we can now again we'll turn it into a function once I've tested it in the rebel
-to make sure the function works and obviously this in this this case it's copying it largely from something that's
-largely black for a lot of them and then again we can do the thing where we
-do it multiple times and here we go now it's got a couple of
-random copies and so again turn that into a class
-uh create our transforms and again we okay so again we can have a
-look at a batch to make sure it looks sensible
-and do it for uh just did it for 25 epochs here
-and gets to 94 percent
-now why did I do it for 25 epochs because I was trying to think about how do I beat my 50 Epoch record
-which was 94.6 and I thought what I could do is I could train for 25 epochs
-and then I'll train a whole new model for a different 25 epochs and I'm going
-to put in a different load I learned to right that this one is 94.1 so one of
-the models was 94.1 one of them was 94. maybe you can guess what we're going to
-do next it's a bit like test time augmentation but rather than that we're going to
-grab the predictions of our first learner and grab the predictions of our second
-learner and stack them up and take their mean and this is called ensembling
-and not surprisingly The Ensemble is better than either of the two individual
-models at 94.4 although unfortunately I'm afraid to say
-we didn't beat our best um but it's uh a useful trick and
-particularly useful Trick In this case I was kind of like trying something a bit interesting to see if using the exact
-same number of epochs can I get a better result by using um ensembling instead of training for
-longer and the answer was I couldn't maybe it's because the random copy is not as good or maybe I'm using too much
-augmentation um who knows but it's something that you could experiment with
-um so Sharon mentions in the chat that um cut mix is similar to this which is
-actually that's a good point I'd forgotten cut mix of it cut mix yes copies it from different images rather
-than from the same image um but yeah it's pretty much the same thing I guess ish
-well um similar yeah very similar
-um all right so that brings us to the end of the lesson and you know I am
-yeah so pumped and excited to share this with you because you know I don't know
-that it's ever been done before you know to be able to to go from from I mean even in our previous courses we've never
-done this before go from scratch step by step to an absolute
-state-of-the-art model where we build everything ourselves and it runs this quickly and we're even using our
-own custom resnet and everything um you know just using common sense at
-every stage um and so hopefully that shows that deep learning is not
-magic you know that we can actually build the pieces ourselves
-and yeah as you'll see going up to larger
-data sets absolutely nothing changes um and um so it's exactly these
-techniques and this is actually I do 99 of my research on very small data sets
-because you can iterate much more quickly you can understand them much better and I don't think there's ever
-been a time where I've then gone up to a bigger data set in my findings didn't continue to hold true
-now homework what I would really like you to do
-is to actually do the thing that I didn't do which is to do the um
-create your own create your own schedulers
-that work with Python's optimizers
-um so I mean it's the tricky bit will be making sure that you understand the
-pytorch API well um which I've really laid out here so
-study this carefully so create your own cosine annealing scheduler from scratch
-and then create your own um one cycle
-scheduler from scratch and make sure that they work correctly with this batch
-scheduler callback this will be a very good exercise for you in you know hopefully
-getting extremely frustrated as things don't work the way you hoped they would and being mystified for a while and then
-working through it you know using this very step-by-step approach lots of experimentation lots of exploration and
-then figuring it out um that's that's the journey I'm hoping you you have if it's all super easy and
+Before data augmentation lets try to improve our model.
+We took the convnet and replaced it with a resnet so it's effectively twice as deep,
+because each conv block has two convolutions. 
+But resnets train better than convNets, so we could go deeper and wider.
+Previously we were going from 8 up to 256. 
+Could we get up to 512?
+One way to do that would be to make our very first res block not have a kernel size `ks=3` 
+but a `ks=5` so that each grid is going to be 5x5, 25 inputs.
+So it's fair enough then to have 16 outputs.
+If we `ks=5`, 16 outputs means if I keep doubling as before we end up at 512 rather than 256.
+The only change was to add `ks=5` and then change to double or the sizes.
+After training accuracy is .927. 
+
+Lets try something to make our resnet more flexible.
+The current resnet is a bit awkward as the number of stride-2 layers has to be big
+enough that the last of them ends up with a 1x1 output so we can flatten it and do the linear.
+That's not flexible, as if we've got something of different size.
+28x28 is a pretty small image.
+Lets create `get_model2` which goes less far, it has one less layer,
+so it only goes up to 256 despite starting at 16. 
+Because it's got one less layer, it's going to end up at 2x2 not 1x1. 
+We can take the mean over the 2x2. 
+A mean over the 2x2 it's going to give us batch size by Channel's output 
+which is what we can then put into our linear layer.
+This is called a global average pooling layer.
+In Pytorch it's called an Adaptive average pooling layer, but n Pytorch we 
+can cause it to have an output other than 1x1.
+Nobody ever uses it that way so they're basically the same thing.
+This is a little bit more convenient than the Pytorch version 
+because we don't have to flatten it.
+After our last resblock which gives us a 2x2 output we have global average pool,
+which takes the mean, and then we can do the linear batchNorm as usual.
+
+Lets improve the summary patch to include not only the number of parameters,
+but also the approximate number of Megaflops. 
+A flop is a floating operation per second. 
+This calculation is not exact, it's not really flops, but actually counted the number of multiplications, which is indicative.
+We added the `_flops` function where you pass in the weight Matrix and the height and the width of the grid.
+If the number of dimensions of the weight Matrix is less than three then we're just doing like a linear layer or something.
+Then the number of elements is the number of "flops" because it's just a matrix multiply.
+If we're doing a convolution, so the dimension is four, then we 
+actually do that Matrix multiply for everything in the height by width grid.
+That's how we calculate this kind of flops equivalent number. 
+
+When we run the model the number of parameters went from 1.2 million up to 4.9 million,
+because of a `ResBlock` that gets all the way up to 512. 
+The way we did this is we made a stride-1  layer.
+So it's gone 2x2 and it stayed at 2x2, to make it as similar as possible with the last ones.
+It's got the same 512 final number of filters, so most of the parameters are in that last block.
+Interestingly, it's not as clear for the Megaflops. 
+It is the greatest of them, but it has more parameters than all the other ones added together.
+But that's not the same for the Megaflops, because the first (input) layer has to be done 28x28 times,
+while the last ResBlock only has to be done 2x2 times.
+
+Training that got a similar result .926
+
+What would reduce the number of parameters (memory) and the megaflots (compute).
+In `model3` lets remove the last ResBlock (that takes it up to 512), 
+and the number of parameters goes down from 4.9 million to 1.2 million.
+Not a big impact on the megaflops but a large reduction on the parameters.
+On the first Resnet block, we have 5.3 megaflops because the 2nd conv of the ResBlock is going to be a 16x16 by 5x5.
+
+This is showing how to investigate what's going on in a model.
+TODO: try these investigations.
+
+Can we make it faster?
+The obvious place to look at is the first (input) Resnet block, because that's where most megaflops are,
+because the second conv is 16x16 channels out by 5x5 kernels, and it's doing it across the whole 28x28 grid.
+That's the bulk of the the biggest compute.
+We could replace this first `ResBlock` with just one convolution, and we've got rid of the 16x16 by 5x5. 
+We just got the 16x1 by 5x5 so the number of Megaflops has gone down from 18.3 to 13.3.
+
+The number of parameters hasn't changed (it was only 6884).
+Careful when people say "my model has less parameters", as that doesn't mean it's faster.
+The relationship between parameters and speed, even counting Megaflops, doesn't always work well,
+because it doesn't take account of the amount of things moving through memory.
+`model4` has less Megaflops and about the same accuracy.
+We've built a model that has less parameters and less Megaflops and has the same accuracy.
+An important thing to keep in mind.
+And this model is better than the resnet18d from `timm`. 
+We've built something that is fast small and accurate.
+
+What if we train for longer? 
+If we train for 20 epochs the training accuracy gets up to .999, but the validation accuracy is worse, .924.
+The reason is that after 20 epochs it's seen the same image so many times it's just memorizing them, and things go downhill.
+We need to regularize.
+We have claimed that we can regularize using weight decay.
+But here weight Decay doesn't regularize at all.
+
+If you use batchNorm
+(*for years people didn't notice this, and then somebody wrote a paper that pointed this out and people wow that's weird*)
+A batchNorm layer has a single set of coefficients which multiplies an entire layer.
+That set of coefficients could just be the number 100 in every place.
+That's going to multiply the entire previous weight Matrix or convolution kernel matrix by 100.
+As far as weight Decay is concerned that's not much of an impact at all,
+because the batchNorm layer has very few weights.
+So it doesn't really have a huge impact on weight decay, 
+but it massively increases the effective scale of the weight Matrix.
+
+batchNorm lets the ANN "cheat" by increasing the coefficients the parameters 
+nearly as much as it wants indirectly just by changing the batch normally as weights.
+Weight decay is not going to save us. 
+Important to recognize, weight Decay is not.
+batchNorm layers I don't see the point of it.
+There's been some studies of what it does and it does have some second order effects 
+on the learning rate but I don't think you should rely on them.
+We should use a scheduler for changing the learning rate rather than second order effects caused by weight decay.
+
+Data augmentation: We're going to modify every image a little bit, by a random change,
+so that the ANN doesn't see the same image each time.
+No reason to implement these from scratch, we can look them up in Fastai,
+but it's actually a separate area to what we're meant to be learning.
+In fastAI vision augment we can see, for example, how to do flip, cropping and padding, etc.
+FastAI probably has the best implementation but `torchvision`'s are fine, so we'll use them.
+
+We've created before a `BatchTransformCB` callback for normalization.
+We could create a transform batch function `tfm_batch` which transforms the inputs `tfm_x` 
+and transforms the outputs `tfm_y` using two different functions.
+That would be an augmentation callback.
+We want to transform our X's using `tfms`, a `Sequential` module,
+which first does a random crop `RandomCrop` and then a random horizontal flip `RandomHorizontalFlip`.
+It is weird to randomly crop a 28x28 image to get a 28x28 image,  
+but we can add padding to it and so it's going to randomly add padding on one or both sides
+to do this kind of random crop.
+
+The `BatchTransformCallback` has `on_train` and `on_val` so that it only does it 
+if we say we want to do it on training and it's training,
+or we want to do it on validation and it's not training.
+
+Data augmentation shouldn't be done on validation so we set `on_val=False`.
+First we use `SingleBbatchCB()` and `fit(1)` just doing training.
+The we grab the batch out of the learner, to see exactly what the model sees.
+This is not relying on any approximations.
+When we fit it puts it in the batch that looks at into learn.batch.
+So if we fit for a single batch we can then grab that batch back, and we can show images.
+We can see a little crop it's added.
+Notice that every single image in this batch (lets grab the first 16) has exactly the same augmentation,
+as we're applying a batch transform.
+This is good because it is running on the GPU, and it's really hard to get enough CPU to feed a fast GPU.
+Particularly on some platforms (kaggle, collab) that are really underpowered for CPU.
+This way all of Transformations augmentation is happening on the GPU.
+On the downside, there's less variety as every minibatch has the same augmentation.
+The downside may not matter because it's going to see lots of minibatches, and
+each minibatch is going to have a different augmentation.
+If we run this multiple times it's got a different augmentation in each minibatch.
+
+We are going to use one padding, a small amount of data augmentation, 20 epochs using onecycleLR.
+Takes a while to train and gets .940.
+Asked Twitter if anybody beat this in 20 epochs any model/Library and nobody's got close.
+In papers with code there are better models but use 250 or more epochs.
+TODO: find a way to beat this in 20 epochs.
+Since this takes a while to train, we should `torch.save` it so we can load that back later.
+
+*Test Time Augmentation* (TTA)
+TTA does the batch transform callback on validation too.
+In this case just a very simple TTA.
+We're going to add a batch transform callback that runs on validate.
+It's not random, just does a horizontal flip.
+We're going to create a new callback called `CapturePpreds()`.
+Aafter each batch it's just going to append to a list `all_preds` the predictions, 
+and it's going to append to a list `all_targs` the targets.
+We can call `learn.fit(1, train=False, cbs=cp) and it will show us the accuracy.
+This is the same number that we saw before but then we can call it the same thing
+but this time with a different callback which is with the horizontal flip callback.
+
+That way it does the same thing as before, but every time it's going to do a horizontal flip.
+Accuracy is slightly higher.
+And we've now got two sets of predictions: with and without the flipped version.
+We could stack those together and take the average of the flipped and unflipped predictions.
+That gives us a better result .942, which is better because we are looking at
+the image from multiple (here 2) different directions, (flipped and unflipped), 
+it gives it more opportunities to understand what this is a picture of.
+This is a bit like Random Forest, it's a kind of bagging that we're doing.
+We're getting multiple predictions and bringing them together.
+
+.942 is the best 20 epoch result and notice we didn't have to do any additional training.
+It still counts as a 20 Epoch result.
+We can do test time augmentation with a much wider range of different augmentations that you trained with.
+And then you can use them at test time too, crops, rotations, warps, etc.
+
+Random Erasing
+We're going to delete a little bit of each picture and replace it with some random gaussian noise.
+In this case we've just got one patch but eventually we're going to do more than one patch.
+We have to implement everything from scratch and this one's a bit less trivial than the previous transforms.
+Let's grab a batch out of the training set, and let's grab the first 16 images,
+Let's grab the mean and standard deviation.
+
+Deleting a patch would change the statistics.
+But if we replace the image with exactly the same mean and standard deviation pixels that the picture has,
+then it won't change the statistics.
+Let's say we want to delete `pct=0.2` of the height and width.
+Let's find out how big that size is.
+0.2 of the shape is the height and of the width that's the size of the X and Y.
+Forn the starting point we're just going to randomly grab some starting point.
+Here we've got the starting point for X `stx` is 14 and starting point for y `sty` is 0.
+The patch is going to be a 5x5 spot.
+
+We do a gaussian or normal initialization of our minibatch.
+Everything in the batch, every channel for this x slice this y slice,
+and we're going to initialize it with this mean and standard deviation normal random noise.
+Don't start by writing a function, start by writing single lines of code that can run independently,
+make sure that they work, e.g., look at the pictures.
+
+One thing that's wrong here is that some of the backgrounds looks black and others gray.
+At first this was confusing, what's the change because the original images didn't look like that 
+The problem is that the minimum and the maximum have changed.
+The previous `xbt.min` and `xbt.max` were -0.8 to 2, but now -3 to 3. 
+The noise we added has the same mean and standard deviation but it doesn't have the same range,          
+because the pixels were not normally distributed originally.
+So normally distributed noise is wrong.
+
+`_rand_erase1` fixes this. It does all the same as before,
+but it `x.clamps_` the random pixels to be between `mn` and `mx`.
+It makes sure that it doesn't change the range, important as the range impacts the activations a lot.
+Now all of the backgrounds have that nice black.
+
+And it's still giving us random pixels.
+Because of the clamping the mean and standard deviation aren't 0-1, but they're very very close.
+And `min` and `max` haven't changed because we clamped them.
+
+That randomly erases one block, and we could create a random arrays which will randomly choose up to (e.g., 4 blocks)
+That's what this data augmentation looks like.
+We can create a class to do this data augmentation so you'll pass in what percentage to do in each block,
+what is the maximum number of blocks to have it store that away,
+and then in the forward we call the `rand_erase()` function passing in the input `x`, and the arguments.
+
+Now we can use `RandomCrop` `RandomHorizontalFlip` and `RandErase`.
+Now we're going to go all the way up to 50 epochs, and we get .946.
+
+How do we actually get the correct distribution?
+We don't end up with zero-one.
+clamping it all feels a bit weird.
+How do we replace these pixels with something that is guaranteed to be the correct distribution?
+A: we can copy another part of the picture over to here.
+If we copy another part of the picture we're guaranteed to have the correct distribution of pixels.
+It wouldn't be random erasing, it would be random copying.
+We're going to implement it manually.
+Let's get our X Mini batch and let's get our our size and again 
+let's get the X Y that this time we're not erasing we're copying.
+We'll randomly get a different X Y to copy from.
+Now instead of random noise we say replace this slice of the batch with this slice of the batch.
+We end up with copied little bits across some.
+We can't really see it all, some of them are black and it's replaced black..
+I guess it's knocked off the end of this shoe, added a little bit extra here, etc.
+
+Lets turn it into a function... once it was tested above) (in the repl??)
+to make sure the function works.
+And it's copying it largely from something that's largely black for a lot of them.
+
+Again we do it multiple times, and get a couple of random copies.
+Turn that into a class, create our transforms.
+We look at a batch to make sure it looks sensible.
+and do it for 25 epochs, gets to .94.
+XXX
+Why 25 epochs? Think how to the 50 Epoch record which was .946...
+We could train for 25 epochs, and then train a whole new model for a different 25 epochs,
+and put in a different Learner `learn2`. 
+learn2 is 94.1 and `learn` was 94. 
+We can ensemble them, grab the predictions of `learn` and `learn2`, 
+stack them up and take their mean. 
+The ensemble returns .944, better than either of the models.
+We still didn't beat our best (.946) but it's a particularly useful trick.
+
+Was trying to see if we can get a better result by using ensembling (with same number of epochs)
+instead of training for longer.
+We couldn't, maybe because the random copy is not as good, 
+or maybe we are using too much augmentation.
+"cut mix" is similar to this,  cut mix copies it from different images rather
+than from the same image.
+
+That brings us to the end of the lesson.
+Even in our previous courses we've never gone from scratch step by step to an absolute
+state-of-the-art model where we build everything ourselves, and it runs this quickly.
+We're even using our own custom Resnet and using common sense at every stage.
+Going up to larger datasets nothing changes on these techniques.
+We should do most (99%) of the research on very small data sets,
+because we can iterate much more quickly, we can understand them better.
+And on a bigger dataset the findings continue to hold true.
+
+Homework: create own own schedulers that work with Python's optimizers.
+It's the tricky bit that will make sure that you understand the pytorch API well.
+Study this carefully, create our own cosine annealing scheduler from scratch,
+and then create our own onecycle scheduler from scratch,
+and make sure that they work correctly with this batch scheduler callback.
+This will be a very good exercise for you.
+Hopefully getting extremely frustrated as things don't work the way you hoped,
+they would and being mystified for a while and then working through it 
+using a step-by-step approach, lots of experimentation lots of exploration.
+
+And then figuring it out that's that's the journey I'm hoping you you have if it's all super easy and
 and you get it first go then you know if I you have to find something else to do
 um but um yeah I'm hoping you'll find it actually you know surprisingly tricky to get it
-all working properly and in the process of doing so you're going to have to do a lot of exploration and experimentation but you'll realize that it requires no
-um like prerequisite knowledge at all okay so um
-if it doesn't work first time it's not because there's something that you didn't learn in graduate school if I knew you had done a PhD whatever it's
+all working properly and in the process of doing so you're going to have to do a lot of exploration 
+and experimentation but you'll realize that it requires no um like prerequisite knowledge at all okay so um
+if it doesn't work first time it's not because there's something that you didn't learn in graduate school 
+if I knew you had done a PhD whatever it's
 just that you need to dig through you know slowly and carefully to see how it all works
 and you know then see how Niche and concise you can get it
 then the other homework is to try and beat me I really really want people to
-beat me try to beat me on the 5e park or the 20 Epoch or the 50 Epoch fashion
-amnest ideally using mini AI
-with things that you've added yourself um
-uh but you know you can try grabbing other libraries if you like or ideally
-if you do grab another library and you find you can beat my Approach try to re-implement that library that way you
-are still within the spirit of the game
+beat me try to beat me on the 5e park or the 20 Epoch or the 50 Epoch fashion mnist 
+ideally using mini AI with things that you've added yourself um
+But we can try grabbing other libraries.
+If you do grab another library and you can beat my Approach try to re-implement that library that way you
+are still within the spirit of the game.
 
-okay so in our next lesson um uh jono and tanishq and I are going to be
-putting this all together to create a diffusion model
-from scratch and we're actually going to be taking a couple of lessons for this I'm not just a diffusion model but a
-variety of interesting generative approaches so we're kind of starting to come full
-circle so thank you um so much for joining me on this very
-extensive journey and I look forward to hearing what you come up with please do
-come and join us on forums.fast.ai and share your your progress
+In our next couple of lessons jono, tanishq and I are going to be putting this all together to create a diffusion model
+from scratch.
+Not just a diffusion model but a variety of interesting generative approaches.
+So we're kind of starting to come full circle.

@@ -1,0 +1,579 @@
+Lesson 9: Deep Learning Foundations to Stable Diffusion, 2022 https://youtu.be/ZkOtBv123V0 
+
+We are not going to be spending all our time on how to do important things with deep learning.  
+We'll be doing fun things  —generative modely fun things— and also   
+understanding details which are not necessarily to know to use this stuff.
+But, to become a researcher or to put something in production,
+—which has complex customization requirements, then it is helpful to learn the details.
+
+Lesson 9,has 2 parts to it. 
+One is a quick run through using Stable Diffusion, describing in some detail how is it working.
+There'll be a whole lot of hand waving.
+It's going to take a few lessons to describe everything from scratch.
+After this lesson we will have a reasonable, intuitive understanding of how this is working.
+
+Assumptions. 
+JH will try to explain everything, roughly what's going on and where we can find out more. 
+JH would strongly suggest doing Part 1 before doing Part 2.  
+Should be comfortable with Deep Learning basics, be able to write a basic SGD loop in Python, how to use  Pytorch, 
+what is an embedding and how to create one of from scratch.
+On the FastAI courses, most people tend to watch the videos a few times.
+On the 2nd time through pause and look things up we don't know, check things, etc. 
+JH expects people to spend about 10 hours of work on each video. 
+Some people spend a lot more and go deep, some people will spend a whole year sabbatical 
+studying “Practical  Deep Learning for Coders” to fully understand everything.
+
+Stable Diffusion:
+We are going to be playing around with Stable Diffusion (SD).
+Tried to prepare this as late as possible so it wouldn't be out of date.  
+Unfortunately, it is out of date.
+As Stable Diffusion is evolving so quickly, that (many/all) of the details and software 
+described today (2022/10/11) will have changed. 
+For example, in the last 24 hours two papers have come out.
+To do a SD generative model, the number of  steps required went down from 1000 to 40 or 50.
+Another paper came out saying it's now down to 4, ie, 256 times faster.  
+And another paper has come out with a separate approach, which makes it 10 to 20 times faster.
+So things are moving very quickly. 
+  
+After this lesson we're going from the foundations, learning how these are built up, and those don't change much. 
+A lot of what we'll be seeing is similar to another course we did in 2019, because the foundations don't change.
+We do things from the foundations, so we can keep up with the research, 
+and do our own research taking advantage of foundational knowledge which all these papers are building on top of.
+
+Earlier we saw Dall-e 2 illustrations.  
+We can now build and run this stuff ourselves. 
+We won't be using the model Dall-e 2, but a different model: Stable Diffusion,
+which has very similar kind of outputs. 
+We can go even further now.
+In strmr.com (funded by Alon, a FastAI alum) we can use a "Dreambooth", to put any object, person, whatever into an image. 
+(TODO:  try it).
+Alon did a quick Dreambooth run and added pictures of JH using his service, e.g., as a dwarf.
+
+JH got help so what we show today is very heavily influenced by input from fastAI alumni.  
+Jonathan Whitaker created educational material about Stable Diffusion.
+Wasim has been an extraordinary contributor.   
+Petro made Camera+ software dramatically better and was highlighted by Apple for the Machine Learning stuff added. 
+He's now at Hugging Face working on the software that we'll be using a  lot —diffusers—.
+Tanishq now at Stability.Ai working on Stable Diffusion models, his expertise  particularly as in medical applications.
+
+Some have recorded  additional videos going into more detail, see course.fast.ai.
+Every lesson has links to notebooks, etc.
+To go even deeper, forums.fast.ai, the Part 2 2022 category, hit on the “about the course” button.
+Every lesson has a chat. 
+Check the questions and answers underneath to see what people have talked about. 
+It can get a bit overwhelming so there's a helpful summarize button to see the  most liked parts.
+
+Compute:
+Part 2 requires more compute than Part 1.  
+Compute options are changing rapidly, big reason is the huge popularity of Stable Diffusion. 
+Colab started charging by the hour for most usage.
+No longer giving good GPUs for free, want you to upgrade, limit how many hours you can use. 
+Strongly suggest trying Paperspace Gradient. 
+For 10 dollars a month get some pretty good GPUs, or pay them a bit more to get even better ones. 
+This will likely change. 
+Lambda Labs and Jarvis Labs are good options. 
+Jarvis was created by alum of the  course and has some just really fantastic  options at a very reasonable price. 
+A lot of fastai students use them and love them. 
+Lambda Labs are rapidly adding new features, as of early October 2022, 
+they're the cheapest provider of big GPUs to run large models. 
+This may have changed by the time you  watch this. 
+In late 2022, GPU prices have come down a lot, consider buying your own machine.
+
+DIFFUSION
+
+diffusion-nbs https://github.com/fastai/diffusion-nbs
+This repo is not the “From the Foundations Notebooks…”, just a couple of notebooks to play with.
+Jonathan "Johno" Whitaker created suggested_tools.md, hopefully he'll keep it up to date.
+It's important to try and play to understand what are the capabilities and constraints,
+and what Research opportunities might there be.  
+The community has moved towards making things available as Colab notebooks.
+If we click, for example, on this one: Deforum.  
+They often have a hacker aesthetic, they add lots of features to fill to try things. 
+They often have a few examples, so we can hit up the Runtime and say:  
+Change Runtime Type to GPU, kind of GPU, and start running things. 
+Many users have no idea what these things mean.
+By the end of the course we will all know what they mean.
+We can create out great outputs with an artisanal approach, as there's lots of information online
+about what kinds of things to try.  
+Check out this stuff from from Johno.  
+
+[@pharmapsychotic](https://pharmapsychotic.com/tools.html) is an overwhelming list of things to play with. 
+Most of them —at the moment— expect you to input some text to say  what you want to create a picture of. 
+It is not easy to know what to write and that gives interesting results,
+so it's quite an artisanal thing to understand what to write.
+The best way to learn what to write is "The  Prompt",
+and to learn about prompts look at other people's prompts and their outputs.  
+Lexica.art has lots of interesting artworks.  
+Search, e.g., "AI artworks", and can see what prompts were used.  
+We start with what we want to make a picture of, what's the style.
+The trick is to add a bunch of artists names or places that they put art in the captions,
+so that the algorithm will tend to create a piece which matches.
+A useful trick is to google search for things. 
+They often tend to have similar stuff to encourage the algorithm to give good outputs. 
+
+Let's look at stable_diffusion.ipybn or copies of parts of it.
+We can clone the https://github.com/fastai/diffusion-nbs repo and run it on Paperspace, etc.
+In Colab just say GitHub, and then paste the link to it directly from GitHub.
+This notebook is largely built with the Hugging Face library Diffusers for doing Stable Diffusion. 
+At the moment, this is our recommended library for doing this stuff.
+To get started we need to log in to Hugging Face.  
+Create  a username, password and then login, and save it on your computer so you won't have to log in again.  
+
+Lets use version 09_Using_SD.ipynb.
+We're going to be working with the Stable Diffusion Pipeline. 
+A pipeline is similar to a "Learner" in fastai.  
+It's got a whole bunch of things in it, processing and models and inference, all automated.
+We can save a pipeline in Diffusers for others to use into the Hugging Face Hub.
+If we use `from_pretrained()`, it uses a Hugging Face repo. 
+We can search Hugging Face for these, and this is what it's going to download. 
+The first time we run this it downloads many gigabytes of data,
+into .cache in our home directory, ~/.cache/huggingface/diffusers/.
+(A challenge on Colab, every time you use Colab everything gets thrown away and start from scratch.)
+In Paperspace or Lambda Labs it's going to be saved.
+
+The pipeline `pipe` we can treat it as a function, pass it a prompt (just some text), 
+and is going to return a list of images. (If we pass one prompt it returns one image.)
+When we run it it returns “a photograph of an astronaut riding a horse”.  
+Every time we call a pipeline using the same random seed we get the same image.  
+We can send the random seed manually to someone, e.g.,
+"Try manual seed 1024 and you get back this particular astronaut riding a horse. "
+That's the basic way to start creating images, and it took 51 steps. 
+Is very different to inference in fastai, where it's one step to  classify something. 
+
+Lets look at an example that we're going to create later ourselves, creating handwritten digits.
+It starts with random noise and each step it tries to make it slightly less noisy  
+and slightly more like the thing we want. 
+Down here is showing all the steps to create the first four, for example, or here to  create the first one. 
+And we can in the noise, there is something that looks a bit like a 1, so it decides to focus on that. 
+This is how diffusion models, basically, work.
+
+Can we just do it in one go? No, if we try to do it in one go it doesn't do a good job. 
+2022 models aren't smart enough to do it in one go. 
+51 steps is out of date, we can now  do it in 3-4 steps. 
+Understanding  this basic concept is important. 
+If we do 16 instead of 51 steps, its better but not amazing.
+That's how we get started.
+We will show a few things that we can tune.
+Most of this stuff was built by Pedro Cuenca and others at Hugging Face.
+They built Diffusers and have done a good job of helping display what we can do with it. 
+
+To illustrate what we can do we define a function `image_grid`.   
+We want to show that we can take a prompt, eg “an astronaut riding a horse” and create four copies  of it. 
+"*" (times), when applied to a list, simply copies the list that many times.
+Then we're going to pass to the pipeline the prompts, and use a different parameter `guidance scale`, 
+which indicates to what degree should it focus on the specifics caption versus just creating an image. 
+So we're going to try a  few different guidance scales, about 1, 2.1, 3, 7, 14. 
+7.5 is/was the default. 
+Each row has a different “guidance scale”.  
+On the first row it hasn't  really listened to us, these are weird looking things,
+none of them really look like “astronauts riding a horse”.  
+At guided scale of 3, they look more like things riding horses, they might be  
+astronautish and at 7.5 they look like astronauts riding a horse.
+
+For every single prompt, it's creating two versions: 
+one of the image with the prompt —“an astronaut riding a horse”— and one with no prompt,
+then it takes the weighted average, with `guidance_scale` as weight.
+
+Something similar we can do, is get the model to create two images but, 
+rather than taking the average, ask it to subtract one from the other. 
+Using the prompt a “Labrador in the style of Vermeer”, and then subtract something which is the caption "blue". 
+The details are slightly different.
+
+Image to Image
+The `StableDiffusionImg2ImgPipeline` is an image to image pipeline. 
+We can grab a sketch and pass to the I2I image to image pipeline as the initial image to start with. 
+Rather than starting the diffusion process with random noise, it's going to start it with  
+a noisy version of the sketch drawing.
+It's going to try to create something that matches this caption, and also follows 
+the sketch as a guiding starting point.  
+And so as a result, we get things that look better than the original drawing, but with a matching composition.
+
+The parameter “strength” indicates to what degree we want to create something that looks like this.
+Let's do an oil painting by Van Gogh, passing the same sketch and a strength of 1.  
+It worked combining simple python code together.  
+We can take the models in that pipeline and can pass it our own images and captions.  
+
+Justin at Lambda created a dataset with Pokémon images and then used an image captioning 
+model to automatically generate captions for each image.
+Then he fine-tuned the Stable Diffusion  model using those image and caption pairs.
+Here's an example of one of the captions in one of the images. 
+And then took that fine-tuned model and passed it prompts like “Girl with a pearl earring” and 
+"Cute Obama creature” and got back nifty images that are reflecting the fine tuning dataset
+that he used and also responding to these prompts.  
+
+Another example of fine-tuning that can take quite a bit of data and quite a bit of time 
+but you can actually do  some special kinds of fine-tuning.   
+Textual Inversion is where we fine-tune just a single embedding. 
+For example, we can create a new embedding where we're trying to make things for a particular look.  
+We give this concept a name, “watercolor-portrait”,  that's what the embedding name we're going to use is. 
+We can then add that token to the text model and then we can train the embeddings for this so that they match  
+the example pictures that we've seen. 
+This is going to be much faster because we're just adding a single token for (in this  case), four pictures. 
+We can then say, for example, “woman reading in the style of” and then  
+passing that token we just trained, and we get back a novel image.
+
+Another example, very similar to textual  inversion, is Dreambooth,
+which, takes an existing token but one that isn't used much like, say, “sks” 
+—nothing, almost nothing has  “sks”— and fine-tunes a model to bring that token,  
+as it says here, close to the images we  provide.
+Pedro grabbed some pictures of JH and said “painting of sks in the style of Paul Signak”.
+The service strmr (Astria - https://www.strmr.com/) is using this, Dreambooth. 
+
+BREAK
+
+One more example, actually of textual inversion training this is my daughter's teddy:  Tiny.  
+JH tried to create a textual inversion version of Tiny and get Tiny riding a horse.
+When JH tried to do that, this top row here —this is actually Pedro's example when he ran it— 
+is showing the kind of steps as he was training,  
+of trying to use the caption “Tiny riding a  horse”. 
+It never generated Tiny riding a horse, instead it generated a horse that looks a little bit like Tiny. 
+
+Then we tried to get “Tiny sitting on a pink rug”, it make some progress, but it doesn't look like Tiny. 
+Pedro started with the embedding of a person —JH started with the embedding for Teddy and it worked a bit better. 
+We'll understand where those problems come from as we talk about how this is trained.
+
+We rely on understanding of how machine learning models are trained.
+Stable Diffusion is normally explained focusing on a particular mathematical derivation.
+JH is developing a new way of thinking about Stable Diffusion.
+It's mathematically equivalent to the approach of others, but it is conceptually much simpler. 
+Later in this course we'll be showing you some really innovative directions when you think of it in this way. 
+It seems something different but it is expressing it in a different way that it's equally mathematically valid.
+ 
+Let's imagine we are trying to generate handwritten digits, i.e., like Stable Diffusion for handwritten digits.  
+We start by assuming there's some API, e.g., some web service, with a function "f" behind it.
+Given an image X, "f"  returns the probability that X is an image of a handwritten digit.  
+For example, given X1, the probability that X1 is a handwritten digit, it might say is, 0.98.  
+Then we pass X2, (looks a  little bit like an 8 but it might not be), and it returns the probability 
+that X2 is a digit is 0.4.  
+Then X3, and it returns the probability that X3 is a handwritten digit… pretty small.
+Given such a function, "f", behind the API, how can we use it to generate handwritten digits?
+
+Imagine we wanted to turn this "mess" into something that did look like an image. 
+Let's say it's a 28x28 image, 784 pixels.
+We could  pick one of these pixels and say: what if I increase this pixel to be a little bit darker? 
+Then we can pass that image through “f” and see what happens to the probability that it's a handwritten digit.
+For example, handwritten  digits don't normally have any pixels that are black in the very bottom corners.
+If we took this and asked: what would happen if we made this a little bit lighter? 
+Then we pass that exact image, and the returned probability would probably go up a tiny bit.
+Say we've got an image which is slightly more like a handwritten digit than before.
+In digits, generally, there are straight lines, so this pixel here, it probably makes sense for it to be darker. 
+If we made a slightly darker version of this pixel, and send it through, 
+that would also increase the probability a little bit.  
+We can do that for every single pixel of the 28x28, one at a time, finding out which ones: 
+if we make them a little bit lighter/darker, make it more like a handwritten digit.  
+What we've done is we've calculated the gradient of the probability that X3 
+is a handwritten digit with respect to the pixels of X3.
+
+Notice that we didn't say “dp(X3)/d(X3)”, because we've calculated this for every single pixel. 
+When we do it for lots of different inputs, we turn the “d” into a del or a nabla, 
+and it means there's lots of values here. 
+These gradients (partial derivatives) are often called the “score  function”.  
+These values are how much does the probability that X3 is a digit increase as we increase each pixel value.
+For a 28x28 inputs it has 784 values, that tell us how can we change X to make it look more like a digit.
+We can now change the pixels according to this gradient.  
+And we can do something similar to what we do when we train Neural Networks, 
+except that instead of changing the weights in a model *we're changing the inputs to the model*. 
+We take every pixel and modify it: subtract its gradient —a little bit times its gradient— 
+so we multiply it by a constant, C. 
+Then we're going to subtract it to get a new image. 
+That new image is probably going to get rid of some of these bits at the bottom, add a few  more bits, etc.
+Now we got an image that looks slightly more like a handwritten digit than before.  
+
+This is the basic idea, and we can now  do that again.
+Lets call X3' the output of what we run through “f”.   
+X3’ has a higher probability that it is a handwritten digit, say 0.2.
+We can now do the same thing, for every pixel, if we increase or decrease its value a little bit, 
+how does it change the probability that the new X3'' is a digit.  
+We get a new gradient, 784 values, and we use it to change every pixel, 
+to make the image look a bit more like a handwritten digit. 
+Given the "magic" "f"  function, we can use it to turn any arbitrary noisy input 
+into something that looks like a valid input, something that has a high P value from that function, by using this derivative. 
+
+As we change the input pixels, how does it change the probability that this is a handwritten digit? 
+That indicates which pixels to make darker and which to make lighter.
+Changing each pixel one at a time to calculate a  derivative, is the "finite differencing"
+method of calculating derivatives, and it's very slow, because we have to call e.g. 784 times every single one. 
+Using Pytorch, we  don't have to use finite differencing, by just calling `f.backward()`.  
+Then we can get `X3.grad()`, and that will give us the same thing by using the analytic derivatives. 
+Later we will learn what `.backward` does, write our own from scratch.
+For now we assume these things exist.  
+
+Maybe we can replace the "f" endpoint by another one "F2" that calls `.backward` and gives us `.grad`.
+Then we don't have to use “f”, but instead call the endpoint that gives us the gradient directly, 
+we'll multiply it by this smaller constant C, subtract it from the pixels, etc.
+We do this a few times, making the input get larger and larger P (probability) that it is a handwritten digit. 
+We don't need "f" that calculates these probabilities. 
+We only need "F2" that tells us which pixels we should change to calculate the probabilities.
+
+Now we need to write "F2".
+When there's a blackbox that we need but doesn't exist, we create a NeuralNet and train it.  
+This Neural Net will tells us which pixels to change to make an image look more like a handwritten digit. 
+We need some training data to get the information we want.
+We can pass in images that look (a bit, a lot, nothing at all) like a handwritten digit.
+We first create real handwritten digits and then chucked random noise on top, so
+each image is composed of a handwritten number and noise.
+
+It's a bit arbitrary to come up with a score for how much is (each image) like a handwritten digit? 
+Instead, let's predict how much noise was added to a handwritten digit to create the image.
+The amount of noise can tell us how much like a handwritten digit the image is: 
+No noise is like a digit, lots of noise is not much like a digit.  
+
+Let's feed in, create a Neural Net, no worry what the architecture is,
+just something that has some inputs, some outputs, a loss function, and the derivative used to update the weights, etc.  
+The inputs to our model are the images. 
+The output is a measure of how much noise there is. 
+Looking at some examples:
+These are all normally distributed random variables, with a mean of zero, and a variance, in this cases,
+in increasing noise, we get N(0,0), N(0,0.1), ...., N(0, 0.9).
+We can predict the actual noise, that's our outputs. 
+Then the loss is going to be very simple.
+We take the input, pass it through our Neural Net, try to predict what the noise was.  
+The prediction of the noise is n-hat and the actual noise is n.
+We can do the  Mean Squared  Error (MSE): divide it by the count, squared, sum all, square root.
+We've got inputs (noisy digit images), we've got outputs (noise).
+The Neural Network is trying to predict this noise. 
+
+We're jumping straight to know how much do we have to change a pixel to make the image more digit-like.  
+To make a noisy image into an image of the handwritten digit, we have to remove the noise. 
+If we can predict the noise, we can then multiply it by a constant and subtract it from our input.
+If we subtract the noise from the input we get a handwritten digit, i.e., what we wanted.  
+
+We know how to do this, any Neural Network, e.g., ConvNeXt, 
+that takes as input images of digits where we've randomly added different amounts (a lot, a little) of noise.
+The ANN predicts what was the added noise, we take the MSE loss between the predicted output and the actual noise, 
+and we use that to update the weights. 
+We now have something that can generate images. 
+We take this trained Neural Network and pass it something very noisy: pure noise.  
+The NeuralNet output indicates which parts it think is noise, 
+and it's going to leave behind the bits that look the most like a digit.  
+It might say: if you left behind the following bits, and it's going to look a bit more like a digit.
+Then maybe you could increase the values of the following bits.   
+After we do that —and so that everything  else is noise, so we subtract those bits times some constant, 
+we get an image that looks more like a digit.
+And then we can just do it again. 
+
+At the moment we use a particular type of Neural Net for this, the first component of Stable Diffusion, the U-Net.
+What we need to know is what's the input and what's the output.  
+The input to the U-Net is a, somewhat noisy, not noisy or all noise image.  
+The output is the  noise, such that if we subtract the output from the input we end up with 
+an approximation of the unnoisy image.
+ 
+COMPRESSION:
+We have 28x28, 784 pixels, which is quite a lot. 
+And it will get worse when we passing high definition photos or images.
+For these we now use 512x512 by 3 Channell RGB, 786432 pixels, i.e. 1000 times this size.
+Training this model where we put noisy versions of millions of such images is going to take a long time.
+We would like to do this as efficiently as possible.  
+Storing the exact pixel value of every single pixel is not the most efficient way. 
+Images have patterns, e.g., green rushes, and there are faster, more concise ways of storing (compress) images.  
+For example, a JPEG picture has fewer bytes than the number of bytes we get if we 
+multiply its height by its width by its channels. 
+
+So lets compress images. 
+Let's take an HD image (512x512x3) and put it through a convolutional layer of stride-2.
+we get back a 256x256 with 6 features/channels.   
+Let's put it through another stride-2 convolution, and we get 128x128, with 12 channels. 
+Another stride-2 convolution gives a 64x64x24.
+Now let's put that through a few Resnet blocks, to squish down the number of channels as much as we can, to 4.
+Now it is down to 64x64x4 = 16384 pixels, which is a 48 times size decrease.
+Now that's useless if we've lost our image, can we get the image back again?  
+We now create an inverse convolution which does the opposite. 
+We take the 64x64x4 image, put it through an inverse convolution, back to 128x128x12, 
+then another inverse convolution,  256x256x6, and finally 512x512x3.
+(All of these are network layers)
+
+We can put all these "layers" inside a Neural Net and start feeding in images.  
+It goes all the way through the Neural Network and out at the other end comes back, initially, random noise. 
+We need a loss function, to say, let's take the last output (512x512x3) 
+and compare it with the image input and do an MSE.
+If we train this model, it is going to try to make the output the exact same thing as the input,
+as if it does that successfully then the MSE would be zero.  
+NB: This is NOT a U-Net (there's no  cross connections). 
+It's just a few of convolutions that decrease in size, followed by a few convolutions that increase in size. 
+
+We're going to try to train this model (an autoencoder) to spit out exactly what it received in.
+That seems boring, what's the point? 
+The autoencoder is interesting because we can split it in half.  
+Let's take an image and put it through just the first half, the encoder. 
+Out of it comes a compressed image of 16,384 bytes, which we can save, 
+when the original input was 48 times bigger. 
+Anyone who receives these compressed, can feed it into the decoder and get back the original image. 
+We created a compression algorithm that works extremely well.
+We didn't train it on one image, we've trained it on millions of images.
+If 2 people have a copy of the encoder/decoder they can share compressed images.
+Note that the compressed image contains all of the interesting and useful information of the input image.
+So, we will train our U-Net using the encoded version of each  picture. 
+
+If we want to train this U-Net on 10 million pictures, 
+we put all 10 million pictures through the autoencoder’s encoder,  
+and we've get 10 million of these smaller things. 
+And then we feed it into the U-Net training hundreds (or thousands) of times to train our U-Net. 
+And so what will that U-Net now do?  
+Something slightly different to what we described, it does not anymore take a somewhat noisy image,  
+instead it takes a somewhat noisy -one of these- compressed images, which are called the Latents. 
+The input is somewhat noisy Latents, the output is still the noise.
+We can now subtract the noise from the somewhat noisy Latents, to give us the actual Latents.  
+We can then take the output of the U-Net and pass it into the autoencoder’s decoder, 
+which takes a (small tensor) Latents and turns it into a picture (large image).  
+The autoencoder name is VAE.  
+
+For training a U-Net, we use the VAE encoder, and for inference the VAE decoder.  
+Latents are optional, we can do without them, but, we would rather not use more compute than necessary.
+The VAE is optional but it saves us a lot of time and money. 
+
+We want to generate specific images, e.g., "teddy bear riding a horse".  
+For MNIST, how could we get it to give us a particular digit. 
+We want to pass in the digit “3” plus some noise and have it generate a handwritten 3 for us.
+For the input to this model, in addition to passing the noisy input, 
+let's also pass in a one-hot encoded version of what digit it is.  
+Previously, this Neural Net took as inputs just the pixels, and now 
+it's also going to take in what digit is it as a one-hot encoded vector.
+
+This Neural Net is going to learn to estimate noise better by taking advantage of knowing what actual digit the input was.
+That is  useful because when we feed in the actual digit (eg 3) 
+as a one hot-encoded  vector plus noise, after this has been trained,  
+then the model can say: the noise is  everything that doesn't represent the number 3.
+That's a way to give it **guidance** about what it is that we're actually trying to remove the noise from. 
+We can use that guidance to guide it as to what image we're trying to create.
+That's the basic idea. 
+
+It was easy to  pass the literal number 8, just create a one-hot encoded vector in which  
+position number eight is a 1 and everything else is a 0.
+But how do we do that for a cute teddy? 
+We can't create every possible sentence and create a one hot-encoded version,
+so we need something else to turn a phrase into an embedding.
+
+We're going to create a model that can take a sentence/phrase like "a cute teddy"
+and return a vector of numbers that in some way represents e.g., what "a cute teddy" look like.  
+We download Internet images that had an image ALT tag next, i.e., 
+The tags for 4 sample images are “a graceful swan”, “a scene from Hitchcock's the birds”, 
+“Jeremy Howard”, “fast.ai's logo”.  
+With these we can create two models: a text encoder and an image encoder.  
+These are Neural Nets, black boxes which contain weights, they need inputs, outputs and a loss function, 
+and then they'll do something.  
+
+Idea: Lets take the swan image, and also take the text “a graceful swan”.  
+We're going to feed these into their respective models, which initially have random weights.
+It is going to spit out random features, a vector of "random crap", because we haven't trained them yet.
+We do the same thing with a scene from Hitchcock, pass the image and the words “scene from  Hitchcock”,
+and we get two other vectors.
+
+We can line these up: “graceful swan”, “Hitchcock”,  “Jeremy Howard”,  and  "fastai logo".  
+Ideally, when we pass the “graceful swan” through our model,  
+we'd get a set of embeddings that are a good match for the text “graceful swan”.  
+Similarly for the other pairs of images and their texts.
+For this particular combination here, we would like this one's features and this one's features to be similar.  
+How can we tell if two sets of things (two vectors) are similar?
+We can multiply them together, element wise, and add them up.  (the dot product.)
+
+We can take the features from an image (eg swan) 
+and the corresponding features from the text for (e.g., “graceful swan”) and take that dot product.  
+And we want that number to be nice and big.  
+Ditto for everything on the diagonal (that represents matching images and texts).  
+On the other hand a graceful swan picture should not have embeddings that are similar 
+to the text “a seen from Hitchcock”.  
+So that operation result should be nice and small. 
+And  ditto for everything else off diagonal.
+
+As a loss function we add up all of the diagonal together and then subtract all of the off-diagonal.
+For this loss function to be good we need the weights of our model for the text encoder, 
+to spit out  embeddings that are very similar to the images that they're paired with. 
+And conversely, for things that they are not paired with, which are not similar.   
+Then given similar phrases like “a graceful  swan”, “some beautiful swan”, “such a lovely swan”, 
+the text encoder should give similar embeddings, because these phrases represent similar pictures. 
+We've created  a  multimodal set of 2 models that together put text and images into the same space. 
+Now we can take "a cute teddy bear", feed it in the textencoder, get out a features vector,
+and use them (instead of one-hot encoded vectors) when we train our photos/paintings U-Net. 
+
+We can do the same thing with guidance. 
+Pass in the text encoder’s feature vector for "a cute  teddy", 
+and it is going to turn the noise into something similar to things that it's previously seen that are cute teddies.  
+The pair of  models that's used here, is called CLIP.  
+A "Contrastive loss" is where we want the related pairs (image, text) to be bigger and 
+the unrelated pairs to be smaller.   
+A CLIP text encoder input is some text, its output is a features embedding.
+Similar sets of text with similar meanings will give us similar embeddings.
+  
+The U-Net that can denoise latents into unnoisy latents, including pure noise. 
+The decoder can take latents and create an image.   
+The text encoder allow us to train a U-Net which is guided by captions.  
+
+Once we've got something that gives us the gradients we want,   
+how do we go about the (interactive) process?  
+The language used in SD is confusing, e.g., “time steps” that got nothing to do with time.
+It is an overhang from how the math was formulated in the first papers.  
+During training we never used any “time steps”, and we will avoid using the term “time steps”. 
+Lets see what they are.
+We used varying levels of noise, very noisy, not noisy, pure noise. 
+We can create a noising schedule, with "t" on the horizontal axis, from 1 to a 1,000, 
+and the vertical axis called "Sigma".
+This is a way to do it: randomly pick a number t from 1 to 1,000, and look up on the noise schedule
+which should be some monotonically decreasing  function.
+Say we pick randomly a "time step" t=4, we look up Sigma(t) which is the amount of noise to use when t=4.   
+Low numbers get a lot of noise (high Sigma), and high numbers get low sigma (hardly any noise).  
+When we are training, we are going to pick for every image a random amount of noise. 
+
+In SD is more common to use Beta as what standard deviation of noise was being used while training.
+Each time we're going to create a minibatch to pass into the model,  
+we randomly pick an image from your training set, randomly pick either an amount of noise,
+or, in some models we randomly pick a “t”, look up Sigma(t), and use that amount of noise to each one.  
+and then pass that minibatch into the model to train it. 
+That trains the weights in the model so it can learn to predict noise. 
+  
+At inference time, when generating a picture from pure noise, the model starts with as much noise as possible.  
+We want it to learn to remove noise, but in practice, (as we saw in the notebook), is creates some hideous images.
+Recall when we tried to create an image in one step. 
+ 
+We multiply the prediction of the noise by some constant —which is kind of like a learning rate— 
+but we're not updating weights now, we're updating pixels. 
+And we subtract it from the pixels.  
+It didn't predict the image, it predicted what the noise is, 
+so that we could then subtract that noise from the noisy image, to give us the denoised image. 
+We don't subtract all of it, we multiply that by a constant and get a somewhat noisy image.  
+The reason we don't jump "all the way" to the "best image we can find" is 
+because things that look like the first noisy image never appeared in our training set.
+Since it never appeared in our training set, the model has no idea what to do with it. 
+The model only knows how to deal with things that look like noisy latents.
+That's why we subtract just a bit of the noise, so we still have a somewhat noisy latent.   
+
+This process repeats.
+Questions like: what do we use for C?  
+How do we go from the prediction of noise to the thing that we subtract? 
+These are decided in the actual sampler. 
+How do we add the noise? how do we subtract the noise?
+This looks like a Deep Learning optimizer, where the constant is called the Learning Rate. 
+We have tricks, for example, if we change the same parameters by a similar amount, 
+multiple times in multiple steps, maybe we should increase the amount we change them, i.e., Momentum. 
+What happens if the variance changes, maybe we can look at that, i.e., Adam. 
+These are types of optimizers, and yes, we could use these kinds of tricks.
+All the diffusion-based models came from a very different math context, differential equations.  
+There are parallel concepts in the world of differential equations,  
+taking little steps and trying to figure out how to take bigger steps. 
+Different differential equation solvers use similar ideas, (if we squint), as optimizers.  
+
+One thing the differential equations solvers do, is that they take “t” as an input. 
+Most diffusion models take the input pixels and the caption/prompt and they also take “t”. 
+The idea is that the model will be better at removing the noise if you tell it how much noise there is. 
+JH suspects that this premise is incorrect, because for a Neural Net is easy to figure out how noisy something is.
+So JH doubts we need to pass in “t”. 
+When we stop passing "t" it stops looking like differential equations and starts looking like optimizers. 
+Johno started experimenting and early results suggest that, when we re-think it as being 
+about learning rates and optimizers, maybe it works better. 
+ 
+For example, we decided, for no particular reason, to use MSE. 
+In statistics and Machine Learning we often use MSE, as the math worked out easier. 
+MSE is good with some particular premises.
+But we can instead used more sophisticated loss functions, where after we subtract the outputs, how good is it? 
+Does it look like a digit? have the similar qualities to a digit?  
+This is Perceptual Loss.  
+
+Do we really need to put noise back? could we instead use this directly?  
+These become possible when think of an optimization rather than a differential equation solving problem.
+This is some of the research that we are doing at the moment and the early results are positive,  
+in terms of how quickly we can do things and what kind of outputs we seem to be getting.
+
+In the next lesson we're going to finish our journey into this notebook.  
+We'll be looking inside the pipeline, and see what's going on behind the scenes in terms of the code.  
+Then we're going to go “from the foundations” and we're going to build up.  
+Our ground rules would be we're only allowed to  use pure Python, the Python standard library and nothing else.
+And build up from there until we have recreated all of this, and possibly, some new research directions at the same time. 

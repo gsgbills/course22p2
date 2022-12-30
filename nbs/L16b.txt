@@ -1,0 +1,422 @@
+Lesson 16 - Part B. 
+Notebook 10, the next big piece we need. 
+We're missing a way to identify how our models are training, 
+to look inside them and see what's going on while they train.
+If we don't have this it's very hard to diagnose and fix problems.
+When people lack a way of diagnosing problems inside their models 
+they often randomly try things until something starts working...
+We're going to do it properly.
+
+We import what we just created in the learner and introduce a set_seed function.
+
+def set_seed(seed):
+    torch.use_deterministic_algorithms(True)
+    torch.manual_seed(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+
+We've been using torch.manual_seed(seed) before.
+We've got 3 random number generators: Pytorch's, numpy's, and Python's.
+Let's seed all of them.
+In Pytorch we can ask it to use deterministic algorithm, so things should be reproducible.
+We shouldn't always make things reproducible, but for lessons this is useful.
+So here's a function that lets you set a reproducible seed.
+
+Let's use the fashion_mnist data set,
+load it up in the same way and let's create a model that looks very similar to our previous models.
+This one might be a bit bigger mightn't it I didn't actually check
+Let's use multi-class accuracy again, the same callbacks that we used before.
+We'll use the trainCB version (for no particular reason),
+and we want to train as fast as possible, because the higher the LR 
+the more we can find a more generalizable set of weights.
+
+Training quickly also means that we can look at each item in the data less often,
+so we're going to have less issues with overfitting.
+If we can train at a high learning rate then that means
+that we're learning to train in a stable way and stable training is is very good
+So let's try setting up a high LR of 0.6 and see what happens.
+
+so here's a function that's just going to create our learner with our callbacks,
+and fit it and return the Learner in case we want to use it.
+It's training and then it suddenly fell apart.
+It's going well for a while, and then it stopped traning nicely.
+In this graph we can immediately see when it stops training well which is very useful.
+
+Why did it go badly? it might have been because of our high LR.
+Let's try to look inside it.
+One way to look inside it would be to create our own sequential model
+just like the sequential model we've built before.
+We created one using nn.ModuleList in a previous lesson. 
+[if you've forgotten go back and check that out]
+When we call that model we go through each layer and just call the layer.
+
+and then we define __iter__ which makes this into an iterator.
+so when you iterate through this model you can
+iterate through the layers.
+
+We train this model in the usual way and this is going to give
+us exactly the same outcome as before, because we are using the same seed.
+so you can see it looks identical
+The difference is that instead of using nn.sequential, 
+we've now used something that saved the means and standard deviations of each layer.
+So now we can plot the activation means.
+We've done it for every batch so that's why along the x-axis here we have batch number,
+and on the y-axis we have the activation means.
+
+We have it for each layer. 
+The 1st layer is blue, second is orange, third green, fourth red, and fifth "movie" color.
+The activations have started pretty small close to zero
+and have increased at an exponentially increasing rate and then have crashed.
+and then increased again an exponentially rate and crashed again.
+it increased again crashed again.
+And each time they've gone up they've gone up even higher and they've crashed.
+What's happening here when our activations are really close to 0
+that means that the inputs to each layer are numbers very close to 0.
+Then the outputs are very close to 0 because we're doing just Matrix multiplies.
+It is a disaster when activations are very close to zero they're dead units,
+they're not able to do anything.
+
+The standard deviations tell an even stronger story.
+We want the means of the activations to be about 0 and
+the standard deviations to be about 1.
+0 mean is OK and as long as they're spread around zero.
+but a standard deviation close to zero is terrible because it means all 
+of the activations are about the same.
+After batch 30 all all of the activations are close to zero and all of the standard
+deviations are close to zero, so all the numbers are about the same (0) so nothing's going on.
+
+The same things happening in the standard deviations. 
+We start with not very much variety in the
+weights it exponentially increases how much variety there is 
+and then it crashes again exponentially increases crashes again.
+This is a classic shape of bad behavior and with these two
+plots we can really understand what's going on in the model.
+
+If we train a model and wonder if it is any good,
+we should checked these plots to see whether it's training nicely. 
+Maybe it could it could be a lot better.
+We'll see some nicer training pictures later.
+We want our mean always about zero and our variance always about one,
+then there is a pretty good chance we're training properly.
+If we don't see that we're certainly not trading properly.
+
+Now lets explain how to do this in a more elegant way, 
+because to look inside your models critically important.
+We don't have to do it manually, e.g., our own sequential model.
+We can use Pytorch hooks.
+A hook is called when a layer that it's registered to is executed during the forward pass 
+(forward hook) or the backward pass (backward hook).
+Using hooks we don't have to rewrite the model, we can add them to any existing model.
+So we can just use standard nn.sequential passing in our layers.
+
+We're still going to have something to keep track of the activation means and standard deviation, 
+so we just create an empty list for now for each layer in the model.
+Let's create a little function that's going to be called.
+A hook is going to call a function during the forward (backward) pass
+for a forward (backward) hook.
+
+def append_stats(i, mod, inp, outp):
+    act_means[i].append(to_cpu(outp).mean())
+    act_stds [i].append(to_cpu(outp).std())
+
+append_stats is going to be passed the layer number (i), the module (mod),
+and the input and the output.
+We store the outputs mean in act_means and the output standard deviation in act_std.
+
+We go through each layer of the model and call on it register_forward_hook (that's part of pytorch).
+The function is always going to be called the function that's going to be
+called is the append_stats function passing in i as the first argument.
+
+We now fit that model, it trains in the usual way, but after each layer it's going to call the hook.
+So we get the same thing as before.
+
+What's the difference between a hook and a callback? nothing at all.
+Hooks and callbacks are the same thing.  
+Pytorch calls them hooks instead of callbacks, they are less flexible than the callbacks 
+that we used in the Learner because we don't have access to all the available states,
+hence we can't change things.
+Hooks are a particular kind of callback that it's just setting a piece of code 
+that's going to be run when something happens, e.g., a layer in the forward or backward pass.
+We could describe the function that's being called back as the Callback, 
+and the thing that's doing the Callback has the hook.
+
+Let's try to simplify this a little bit.
+We defined a class called Hook()
+
+class Hook():
+    def __init__(self, m, f): self.hook = m.register_forward_hook(partial(f, self))
+    def remove(self): self.hook.remove()
+    def __del__(self): self.remove()
+    
+When we create it we're going to pass in the module that we're hooking so we call 
+m.register_forward_hook and we pass the function that we want to be given (f), 
+and also pass in the hook class.
+Let's also define a remove to remove the hook, as we don't want it sitting around forever.
+The __del__ is called by Python when an object is freed, so when that happens 
+we should also make sure that we remove this.
+
+def append_stats(hook, mod, inp, outp):
+    if not hasattr(hook,'stats'): hook.stats = ([],[])
+    acts = to_cpu(outp)
+    hook.stats[0].append(acts.mean())
+    hook.stats[1].append(acts.std())
+    
+The new  append_stats it's going to get passed the hook because that's what we asked
+to be passed.
+If there's no .stats attribute in there yet then let's create one.
+Then we're going to be passed the activations so put that on the CPU.
+Then append the mean and the standard deviation.
+Now the stats are inside this object which is convenient.
+
+Now we can do the same thing as before but we don't have to set any of that Global stuff.
+When we fit that it's going to run with the hooks.
+We get the same shape as usual and we get back the same results as usual.
+As we're going to be adding multiple Hooks, and this list comprehension 
+hooks = [Hook(l, append_stats) for l in model[:5].children()]
+is a bit inconvenient so let's create a hooks class.
+
+First lets see how the hooks class works in practice, making it a context manager.
+We're going to call, pass in the model, pass in the function to use, 
+and then fit the model and that's it.
+Just one extra line of code  to set up the whole thing.
+
+with Hooks(model, append_stats) as hooks:
+    fit(model)
+
+And then we can go through each hook and plot the mean and standard deviation of each layer. 
+So the hooks class is going to make things easier.
+
+We want to be able to loop through it, to index into it.
+All that behavior is in the Hook class.
+We're going to use the most flexible way of creating context managers. 
+The general way of creating a context manager  is to create a class 
+and define two special things __enter__ and __exit__.
+
+__enter__ is called when it hits the with statement.
+If you add an as xxxx after it then the contents of xxxx variable 
+will be whatever is returned from __enter__.
+Here we just returned the object itself, so the the Hooks object is going to be stored in `hooks`.
+
+class Hooks(list):
+    def __init__(self, ms, f): super().__init__([Hook(m, f) for m in ms])
+    def __enter__(self, *args): return self
+    def __exit__ (self, *args): self.remove()
+    def __del__(self): self.remove()
+    def __delitem__(self, i):
+        self[i].remove()
+        super().__delitem__(i)
+    def remove(self):
+        for h in self: h.remove()
+        
+The Hooks class inherits from list.
+[you can do this you can actually inherit from stuff like list in Python].
+The hooks object is a list and therefore we need to call the superclasses Constructor
+and we're going to pass in a that list comprehension we saw,
+that list of hooks where it's going to hook into each module,
+and the list of modules we ask to hook into.
+Now we're passing in a model here but because the model is an nn.sequential 
+we can loop through an nn.sequential and it returns each of the layers.
+
+__exit__ is what's called automatically at the end of the whole block,
+so when this whole thing's finished it's going to remove the hooks,
+going through each hook and remove it.
+We can do for each because it is a list.
+We also added an optional  __delitem__ that lets us delete a single Hook from the list.
+
+here's a dummy context manager as you can see here it's got a done to enter
+which is going to return itself and it's going to print something so you can see 
+here I call with dummy context manager and so therefore it prints let's go first
+the second thing it's going to do is call this code inside the context manager so
+we've got as DCM so that's itself and so it's going to actually call hello which prints hello
+so here it is and then finally it's going to automatically call exit Thunder exit
+which is all done so here's all done.
+
+[if you haven't used context managers before you want to be creating little samples like this for 
+yourself and getting them to work. This is our key homework for
+this week: anything in the lesson where we're using a part of Python
+that you're not 100% familiar with is for you to create some simple
+dummy version that fully explores what it's doing.
+If you're familiar with all the Python pieces then it's to explore
+to do the same thing with the Pytorch pieces, like with with hooks and so forth.]
+
+Now to show what it's like to inherit from list. 
+Here we are inheriting from a list and we redefine how __delitem__ works. 
+We create a dummy list as usual but if I delete an item from the
+list it's going to call our overridden version, 
+and then it will call the original version.
+So the list has now got removed that item and did this at the same time.
+
+[ we can actually  modify how Python works or create our own things that get all
+the behavior or the convenience of Python classes like this one and add stuff to them]
+
+The next bit was developed largely in San Francisco with Stefano so many
+thanks to him for helping get this next bit looking great.
+We're going to create my favorite single image explanations of what's going on inside a model.
+We call them the colorful Dimension which they're histograms.
+We're going to take our same append_stats (all the same as before) 
+we're going to add an extra line of code which is to get a histogram of the absolute values 
+of the activations 
+[a histogram is something that takes a collection of numbers and tells
+you how frequent each group of numbers are].
+We're going to create 50 bins for our histogram so
+we will use our hooks that we just created and we're going to use this new version of append_stats 
+so it's going to train as before, but now in addition it will have in stats  a histogram.
+
+We're now going to create this amazing plot.
+This plot is showing is for the first, second, third, and fourth layers 
+what does the training look like.
+The basic idea is that we're seeing this same pattern
+but what is this pattern showing, what exactly is going on in these pictures?
+Let's draw a normal histogram where we grouped all the data into bins, 
+and we have counts of how much is in each bin.
+So for example this will be like the value of the activations, 
+and it might be say from 0 to 10 and then from 10 to 20 and
+from 20 to 30 and these are equally spaced bins.
+This is a histogram, Here is the count it's a number of items with that range of values.
+
+We turn that histogram into a single column of pixels.
+If I take one column of pixels where that's actually one histogram.
+And the way we do it is we take these numbers.
+Let's say it's like 14 2 7 9 11 3 2 4 2. 
+We turn it into a single column, in this case we've got 
+one two three four five six seven eight nine groups.
+We would create our nine groups.
+We take the first group it's 14 and we color it with a gradient according to how big that number is.
+14 is a big number so depending what you know what gradient we use maybe red is really big.
+The next one is really small which might be green.
+The next one's quite big in the middle which is like blue.
+The next one's getting quite bigger still back to all red.
+Next one's bigger it's even more red and so forth.
+
+We're taking the histogram and making it into a color-coded single column plot.
+Let's take a layer, number two.
+We can take the very first column and so in the color
+scheme that matplotlib picked, yellow is the most common, then light green is less common,
+and then light blue, and then dark blue is zero.
+The vast majority is zero and there's a few with slightly bigger numbers.
+This is the same that we saw for index one layer here.
+The average is pretty close to zero, the standard deviation is pretty small.
+This is giving us more information so as we train at this point here
+quite a few activations that are a lot larger as you can see and still the vast
+majority of them are very small.
+But there's a few big ones so it's still got a bright yellow bar at the bottom.
+
+def get_hist(h): return torch.stack(h.stats[2]).t().float().log1p()
+
+Notice here that we've taken those histograms we've stacked them all up into a single tensor 
+and then we've taken their log1p.
+log1p is just log of the number plus one.
+That's because we've got zeros here and so just taking the log is going to 
+let us see the full range more clearly.
+Ideally we like to see here is that this whole thing should be more like a rectangle.
+The maximum should not be changing very much.
+There shouldn't be a thick yellow bar at the bottom, but instead it should be a nice 
+even gradient matching a normal distribution.
+each single column of pixels wants to have a normal distribution 
+so it'll gradually decreasing the number of activations.
+That's what we're aiming for.
+
+Another easier to read version of this is to take those first two bottom pixels.
+In the bottom two pixels we've got the smallest two equally sized groups of activations.
+But we don't want too many of them because those are dead or nearly dead activations.
+They're much smaller than the big ones.
+Taking the ratio between those bottom two groups and the total 
+tells us what percentage have (near) zero or extremely small magnitudes.
+These are absolute values so if we plot those you can see how bad this is.
+For example the final layer from the very start nearly all of the activations are disabled.
+If most of our model is close to zero then most of it is doing no work.
+So it may look like at the very end things were improving...
+But as you can see from this chart that's not true.
+Still the vast majority are inactive.
+
+If early in training we see a rising crash Rising crash pattern, 
+we should stop and restart training.
+Such a model will probably never recover, as too many of the activations have gone off the rails.
+So we want it to look kind of like this the whole time but
+with less of this very thick yellow bar which is showing us most are inactive.
+
+We've got now all of the key pieces we need to flexibly change how we train models,
+and to understand what's going on inside our models.
+From this point we've drilled down as deep as we need to go.
+We can now start to come back up again and put together the pieces that are going to help us train
+models reliably and quickly.
+Then we're going to be able to successfully create, from scratch, 
+some really high quality generative (and other) models.
+
+Next class we're going to start looking at things like initialization, a really important topic.
+Make sure that you're comfortable with standard deviations etc  
+because we'll be using that quite a lot.
+
+
+APPEND from 17 to Notebook 10
+I'm just going to mention a couple of minor changes that I made to our miniAI Library 
+this week one was I went back to
+our callback class in the learner notebook and I did decide in the end to
+add a Dunder gadatra to it that just adds these four
+um uh these four attributes and for these four attributes it passes it down to
+self.learn so in a callback you'll be able to refer to model to getself.land.model opt will be
+self.land.opt batch will be self.loan.batch and Epoch will be self.learn.epook
+you can change these you know you could subclass the Callback and add your own to underscore forward or you could
+remove things from underscore forward or whatever but I felt like these four things I access a lot another secret typing self.learn
+um and then I added one more property which is of course in a callback there'll be a self.training
+um which says from typing self.learn.model.trading
+um since we have model you can get rid of the learn but uh still I mean you so often have to check the training now you
+can just get self.training in a um in a callback so that was one change I made
+uh the second change I made was I found myself
+um uh getting a bit bored of adding train CB every time so what I did was I took
+the four training methods from the momentum learner
+subclass and I've moved them into a train learner subclass along with zero
+grad so now momentum learner actually inherits from train learner and just
+adds momentum take this kind of a quirky momentum method
+um and change a zero grad to do the momentum thing so you yeah so we'll be
+using train learner quite a bit over the next lesson or two so train Learners just a learner which
+has the usual training and it's exactly the same that first ao2
+has or you'd have in most Pi torch training loops um
+and obviously by using this you lose the ability to change these with a callback so it's a little bit less flexible
+um okay so those are little changes um and then I made some changes to what
+we looked at last week which is the activations notebook um and specifically
+um okay so I added a um a hooks callback
+um so previously we had a hooks class and uh it didn't really require too much
+ceremony to use but I thought we could make it even simpler and a bit more fast ai-ish or mini AIS by putting hooks
+into a callback so this callback uh as usual you pass a function that's
+going to be called for your hook and you can optionally pass it a filter
+as to what modules you want to hook um and then in before fit it will
+um filter the modules in the learner
+um and so this is one of these things we can now get rid of we don't need the dot learn here because model is one of the
+four things we have a shortcut to and then here we're going to create the hooks
+object and put it in hooks um and so one thing that's convenient here
+is the hook function now you don't have to worry and we can get rid of learn dot model you don't have to worry about checking in your hook functions whether
+in training or not it always checks whether you're in training and if so it calls that hook function you passed in and after it finishes it removes the
+hooks and you can iterate through the hooks and get the length of the hooks because it just passes these iterators
+and length down to self.hooks so to show you how this works we can create a hooks callback we can
+use the same um append stats
+and then we can run the model
+and so as it's trading um what we're going to be able to do is yeah we can now then here we go
+um so we just added that as an extra callback to our fit function I don't
+remember if we had the extra callbacks before I'm not sure we did so just to explain it's just I just added extra callbacks
+here in the fit function and we're just adding any extra callbacks yeah
+um so then now that we've got that callback
+that we created because we can get iterate through it and so forth we can just iterate it through that callback as
+if it's Hooks and plot in the usual way so that's a convenient little thing I think it's convenient thing I added
+okay um and then I took our
+colorful Dimension stuff um which is defined when I came up with a
+few years ago and decided to wrap all that up in a callback as well so I've actually subclassed here our hooks
+callback to create an activation stats and what that's going to do is it's going to use this append stats which
+appends the mains the standard deviations and the histograms
+um and um oh and I changed that very slightly also the thing which creates these kind
+of dead plots I changed it to just get the ratio of the very uh first very
+smallest uh histogram bin to the rest of the bins
+so these are really kind of more like very dead at this point um so these graphs look a little bit
+different um okay so yeah so I subclass the hooks callback and and
+um yeah added the colorful Dimension method a dead chat method and a plot
+stats method so to see them at work if we want to get the activations on and
+all of the cons then we train our model
+and then we can just call and so we we've added created our activation stats we've added that as an extra callback
+and then and then uh yeah then we can call
+colored in to get that plot dead chat to get that plot and plot stats to get that chart plot so now we have absolutely no
+excuse for not getting all of these really fantastic um informative visualizations of what's
+going on inside our model because it's literally as easy as adding one line of code
+and just putting that in your callbacks so I really think that couldn't be easier and so I hope you'll even for
+models you thought you know were training really well why don't you try using this because you
+might be surprised to discover that they're not okay so those are some changes
+pretty minor but hopefully useful

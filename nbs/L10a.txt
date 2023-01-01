@@ -1,0 +1,330 @@
+lesson 10 of “Practical Deep Learning for Coders”.  
+Second lesson in Part 2, which is where  we're going from “Deep Learning Foundations to Stable Diffusion”. 
+Let's take a look at some interesting work that students in the course have done over the last week. 
+Check out the “Share your work here” thread on the forum.
+@puru did a spherical linear interpolation between two different latent noise starting points 
+for an otter picture and then showed all the intermediate results.  
+Something  similar starting with an old car prompt and going to a modern Ferrari prompt 
+as it goes through that latent space, it is changing the image that's  coming out. 
+@namrata is starting with a dinosaur and turning into a bird and this is  
+a very cool intermediate picture of one of the  steps along the way: the dino-bird.
+John Richmond took his daughter's dog and turned it gradually into  a unicorn.
+Maureen took Johno's parrot image from his lesson and tried bringing it across to 
+various different painters styles...
+Her question was: “anyone want  to guess the artists in the prompts?”.  Frida Kahlo, Jackson Pollock, 
+Jason Antic, took the idea of using classic optimizers, rather than differential  equation solvers, 
+and he actually made it work well already within a week. 
+These faces  were generated on a single GPU, in a few hours, 
+from scratch using classic Deep Learning optimizers.
+This research direction is looking extremely promising. 
+
+Lets look into some slides that we can use. 
+If we're doing handwritten digits, for example, we'd start with a number, e.g. 7,  
+this would be one of the ones with a stroke through it, that some countries use.   
+We add to it some noise, and the 7 plus the noise would equal a noisy seven. 
+This noisy 7 is input to a U-Net that predicts which pixels are noise,
+then compares its prediction to the actual noise, gets a loss, which it can use to update the weights in the U-Net.
+That's basically how Stable Diffusion U-Net, is created. 
+We can also pass in an embedding of the actual digit, e.g., “7”, as a one-hot encoded vector,  
+which goes through an embedding layer.  
+Then we also have the benefit that we can actually generate specific digits by saying 
+what digit we want, and it knows what they look like. 
+
+The VAE/latents are a computational shortcut to make it faster, by pre-processing inputs into the latent space. 
+To handle more interesting phrases, e.g., “a graceful swan” or “a scene from Hitchcock”, 
+we turn these phrases into embeddings.   
+We create these embeddings which are similar to embeddings of downloaded photos or images 
+that they  are connected with CLIP.
+They downloaded from the Internet lots of images, each with their ALT tags.
+We build two models: an image encoder, that turns each image into some feature vector,  
+and a text encoder, that turns  each piece of text into a bunch of features.  
+Then we create a loss function that says that the features for each text, 
+should be as close as possible to the features for the corresponding image,
+specifically we take the dot product. 
+And then we add up all the matching ones (green in the diagonal), 
+and we subtract all the others (red),  because in those the text doesn't match the  image. 
+That is the Contrastive Loss which gives us the CL in CLIP. 
+
+We haven't been doing any of that training ourselves except for  
+some fine tuning, because it takes a very long time and compute resources. 
+Istead we take pre-trained models and do inference.
+We put in an example of what we have an embedding for, e.g., a handwritten digit 3.
+We put in some random noise into the U-Net and then it outputs a prediction of which  
+bits of noise you could remove to leave behind an image of "3". 
+Initially it's going to do a bad job, so we subtract just a little bit of that noise from the image  
+to make it a little bit less noisy, and we do it again a few times.  
+
+So here's what that looks like, creating “a smiling picture of Jeremy Howard”. 
+if we print out the noise at steps 0, 6, at step 12, first signs of a face starting to  
+appear, by step 30 it's looking like a face, by 42 it's getting there. 
+(it should finish at 60, not 54).  
+In the early days this took a thousand steps and now shortcuts make it take 60 steps. 
+This doesn't look like normal noise is because we are using VAE latents.
+Noisy latents don't look like gaussian noise, they look like this when we decode those noisy latents.
+
+Lets start going through some papers, and show how they have taken the required number of steps from 60 to 4.  
+Specifically “Progressive Distillation for Fast Sampling of Diffusion Models”.  
+We start with a process which is gradually denoising images.  
+To get it down from 60 to 4 steps we're going to do a process called “Distillation”. 
+In Distillation we take a Teacher Network, (a Neural Network that already knows how to do something), 
+but it might be  slow and big. 
+The Teacher Network is then used by a Student Network which tries to learn how to 
+do the same thing but faster or with less memory.  
+In this case we want ours to be faster, fewer steps. 
+  
+Given that Neural Nets are amazing, why is it taking, e.g., 18 steps to go from snapshot 36 to snapshot 54. 
+Sems like something that we should be able to do in one step.  
+It is taking 18 steps because of the math of how the diffusion was originally developed.
+The idea in this paper is what if we train a new model that takes as input image snapshot 36, 
+and puts it through some other U-Net B, that spits out some result.  
+We take that result and we compare it to the final image, snapshot 54, —the thing we actually  want—. 
+We have each intermediate output and the desired goal where we're trying to get to.  
+We can compare those two, eg Mean Squared Error.  
+If we keep doing this for lots of images and pairs in this way, 
+this U-Net is going to learn to take these incomplete images and turn them into complete images. 
+That is what this paper does. 
+Now that we've got all these examples of showing what step 36 should turn into at step 54,  
+let's just feed those examples into a model.   
+And that works, because like a human would be able to look at this, 
+and if they are  competent artists, they could turn it into a well-finished product.
+
+There are some tweaks around how it makes this work which I'll briefly describe,
+because we need to be able to go from, step 1 through to step 10, through to step 20 and so forth. 
+The way that it does this is clever.
+Initially, they take their teacher model, the one that is a complete SD that has already been trained. 
+We take that as a given, and we put in our noise through two time steps.
+And then we train our U-Net B to try to go directly from the noise to time step number 2. 
+That's easy for it to do. 
+And so then what they do is they take the student model, and treat it as a new teacher. 
+They now take their noise and they run it through the student model twice, once and twice, 
+and they get out something at the end.  
+Then they try to create a new  student, which is a copy of the previous student,
+and it learns to go directly from the noise to "two goes" of the student model.
+Now take that new student model and use that to go two goes and then they learn.
+They use that, then they copy that to become the next student model. 
+And so they're doing it again and again and each time they're doubling the amount of work. 
+So it goes one to two, effectively it's then going two to four, and then four to eight. 
+And  that's basically what they're doing for multiple different time steps. 
+So the single student model is learning to both do these initial steps: 
+try to jump multiple steps at a time, and it's also learning to do these later steps: multiple steps at a time.  
+And that's how it works. 
+
+A second paper (by the same team) is called “On Distillation of Guided Diffusion Models”.  
+Last week we used "Classifier Free Guided Diffusion Models" (CFGDM). 
+There we put in a prompt, e.g., “cute puppy” into our CLIP text encoder and got out an embedding.  
+And we put the embedding into our U-Net, and we also put the empty prompt into our CLIP text encoder;  
+we concatenate these things two together so that then we get back two  things: 
+(1) the image (eg of the cute puppy) and (2)  the image of some arbitrary thing —it could be anything—. 
+Then we do something like taking the weighted average of these two images together and combine them. 
+Then we use that for the next stage of our diffusion process.  
+This paper says: this is  awkward, we end up having to train two images instead of one, 
+and, for different types of levels of guided diffusion, we have to do it multiple different times.
+How do we skip it?
+
+With the same student-teacher distillation, but this time we pass in addition the guidance. 
+We've got the entire Stable Diffusion teacher model available for us.
+We are doing actual CFGD (Classifier Free Guided Diffusion) to create our guided diffusion cute puppy pictures.
+And we're doing it for a range  of different guidance scales, —e.g., 2, 7.5, 12- 
+and those now are becoming inputs to our student model. 
+So the student model now has additional inputs, it's getting the noise, it's getting the prompt,  
+and now is also getting the guidance scale. 
+It's learning to find out how all of these things are handled by the teacher model —like what does it do?—  
+after a few steps, each time.  
+So it's like before but now it's learning to use the Classifier Free Guided Diffusion as well.
+
+If this is a bit confusing, check out Johno's video paper walkthrough,
+to get a sense of how to skip over the math to focus on the important thing which is the algorithm.   
+When you look at the algorithm we realize: it's basically division, 
+sampling from a normal distribution, subtraction, multiplication, logs.
+When you  look at the code it becomes even more understandable.
+TODO: check out Johno's video.
+
+Another paper, called “Imagic”, we can pass an input image of a bird and some text, e.g., “a bird spreading wings”. 
+It takes an image of a bird in this exact pose, leave everything as similar as possible, 
+but adjust it so that the prompt is now matched. 
+Another example given a person produces the same person giving the thumbs up, 
+with everything else very similar to the original picture.  
+A dog that is not sitting, but given the prompt “a sitting dog”,  
+it turns it into a sitting dog, leaving everything else as similar as possible.  
+An image of a waterfall and the prompt “a children's drawing of a waterfall” and it's become a children's drawing.
+(Many more examples fromthe paper)
+
+Lets see how it works, without too much detail,just get the idea.
+Start  with a fully pre-trained, ready to go generative model like a Stable Diffusion model. 
+In the paper they use Imagen but the details do not depend on what the model is, should work fine for Stable Diffusion. 
+
+(A) Take caption of “a photo  of a bird spreading wings”  as the target.
+We create an embedding from that using our CLIP encoder.
+Pass the embedding through our Pre-trained Diffusion Model, and we see what it creates. 
+It doesn't create something that's like our bird. 
+Then they they fine-tune this embedding, like textual inversion, to make the diffusion model output 
+something that is as similar as possible to the input image of the bird. 
+They're "moving" the embedding a little bit.
+They don't do this for very long, they just move it a little bit in the right direction.
+Then they lock that eopt embedding in place.
+
+(B) Now they fine-tune the entire diffusion model end to end, including the VAE.
+(actually with Imagen, and they have a super resolution model, but same idea.)
+Now store the optimized embedding we created don't change it, it is frozen.  
+Now try to make the Fine-Tuned diffusion model output the original input bird, as close as possible.
+We fine-tune that for a few epochs, it takes the embedding that we fine-tuned 
+through a fine-tuned model and spits out our bird.
+  
+(C) Generation: 
+The original target embedding we actually wanted —is “a photo of a bird spreading its wings”— 
+we ended  up with this slightly different embedding.
+We take the weighted average of the two embeddings, that's called the interpolate step, 
+we pass that through this fine-tuned diffusion model and we're done.
+
+This should not take a long time nor require any particular special hardware, 
+and now anyone can generate believable photos that never actually existed.  
+Jhono says that it took about eight minutes to do it for Imagen  on TPU. 
+Although Imagen's quite a slow, big model although the TPUs they used were the latest TPUs. 
+So might be an hour or  something for a Stable Diffusion on GPUs.  
+
+XXXXXXXXXXXXXXXXX
+
+Back to the diffusion-nbs repo, stable_diffusion notebook,from Hugging Face folks, (Whatis_SD)
+Lets dig into the pipeline to pull it apart step by step, so we see what happens. 
+First, how to create those gradual-denoising-pictures, thanks to the Callback.  
+So you can say here: when you go through the  pipeline, every 12 steps, call this function;  
+and as you can see it's going to call it with “i” and “t” and the “latents”.   
+We just make an image and stick it on the edge end of an array.
+This is how to interact with a pipeline without rewriting it from scratch. 
+Now we're going to build it from  scratch. 
+
+We don't have to use a callback because we will be able to change it ourselves.   
+What's going to be going on in the pipeline is seeing all of the steps that we saw last week.
+We're not going to show the code of how each step is implemented. 
+So, for example, the CLIP text model that takes as input a prompt and creates an embedding, we take as a given.
+We download it from openAI pre-trained `clipped-vit-large-patch-14`, using
+`.from_pretrained`, so HF `Transformers` will download and create that model for us. 
+Ditto for the tokenizer, the autoencoder, entered over the U-Net folder.
+So there they all are, we can just  grab them and take them all as a given,  
+
+Next, we need a scheduler to converts "time steps" into the amount of noise.
+We use something that Hugging Face —well actually in  this case Catherine Carlson— has already provided,  
+which is a scheduler. 
+It's basically  something that shows us that connection,  so we've got that. 
+So we use that scheduler and we say how much noise when we're using.
+We have to make sure that matches, so we use these numbers that we're given.  
+
+To create a photograph of an astronaut riding a horse, again,  
+in 70 steps, with a 7.5 guidance scale, batch size  of 1. 
+Step 1 is to take our prompt and  tokenize it. 
+We looked at that in Part  1 of the course, just splitting it 
+into words or sub-word units if they're long and  unusual words. 
+  
+The start of sentence token, and this  will be our “ a photograph of an astronaut”,  etc. 
+Then the same token is repeated at the end, that's just the padding.
+GPUs and TPUs like to do lots of things at once, so everything has to be the same length by padding them.  
+Lot of wasted work, but a GPU would rather do lots of things at the same time, 
+on exactly the same sized  input, so this is why we have all this padding.
+If we decode that number, it's the end of text marker,  which is just padding.
+The tokenizer returns the input IDs —lookups into a vocabulary— 
+and a mask, which tells it which ones are actual  words as opposed to padding —which is not very  interesting—. 
+
+We can now take those input IDs, put them on the GPU, and run them through the CLIP encoder.  
+And so, for a batch size of one, so we've got one  image, that gives us back a 77x768, because we've  
+got 77 tokens and each one of those creates a 768 long vector, so we've got a 77 by 768 tensor. 
+These are the embeddings for “a photograph of an  astronaut riding a horse” that come from CLIP. 
+Everything is pre-trained, all done for us, we're just doing inference.  
+
+For the classifier free guidance, we also need the embeddings for the empty string, so we do the same thing.  
+We concatenate those two together, to get the  GPU to do both at the same time.
+
+And so now we create our noise.   
+And because we're doing it with a VAE, we can call it latents, but it's just noise, really.  
+I wonder if you'd still call it "latents" without the VAE...  
+So that's just random numbers, normally generated, normally distributed random numbers of size one  
+—that's our batch size— and the reason that we've  got this divided by 8 here is because that's what  
+the VAE does, it allows us to create things that are eight times smaller by height and width,  
+and then it's going to expand it up again for us later, that's why this is so much faster.  
+
+After we put it on the GPU, `.half()` is converting into half precision (fp_16),
+making it half as big in memory by using less precision. 
+Modern GPUs are faster if we do that. Fastai does all this stuff.
+
+We want to do 70 steps.     
+We take our random noise and we scale it, to make sure that we have the right amount of variance, 
+else activations and gradients would go out of control. 
+We're going to talk about this later, and show tricks to handle this automatically.
+At the moment, in the Stable Diffusion world this is done in ways that are too tied to the details of the model. 
+We'll be able to improve it as the course goes on, but for now we'll stick with how everybody else is doing it.
+
+Normally it would take a thousand time steps but because we're using a fancy scheduler we get to skip, 
+about 14 steps, from 999 to 984, to 970 and so forth. 
+They're not time steps, they're not integers.  
+It's just a measure of how much noise we are adding at each time, 
+and we find out how much noise by looking it up on the graph.  
+That's all time step means, it's not a step of time, confusing word.
+
+`scheduler.sigmas` is the actual  amount of noise at each one of those iterations.  
+Here is the amount of noise for each "time step" and we'll be going backwards, start at 999. 
+So we start with lots of noise and then we'll be  using less and less noise.
+We go through the 70 time steps in a for loop, concatenating our two noise bits together:
+the classifier free and the prompt versions. 
+Do our scaling, calculate our predictions from the U-Net.  
+And notice here we're passing in the time step as well as our prompt.  
+That's going to return two things: the unconditional prediction, so that's the one for  
+the empty string —remember we passed in, one of  the two things we passed in was the empty string—  
+so we concatenated them together and so after they come out of the U-Net, we can  
+pull them apart again, so .chunk() just means:  pull them apart into two separate variables.  
+
+Now we can do the guidance scale that we talked about last week.  
+And so now we can do that update, where we take a little bit of the noise  
+and remove it to give us our new latents. 
+So that's the loop.
+
+And so at the end of all  that, we decode it in the VAE  
+—the paper that created this VAE tells us that we have to divide it by this number to scale  
+it correctly— and once we've done that, that gives us a number which is between negative one and one.  
+
+Python Imaging Library expects  something between zero and one,   
+so that's what we do here, to make it between zero and one, and like enforce that to be true,  
+put that back on the CPU, make sure that the order of the dimensions is the same as what  
+Python Imaging Library expects. 
+And then finally convert it up to between 0 and 255 as an INT,  
+which is actually what PIL really wants and there's our picture. 
+So there's all the steps.
+
+XXXXXXXXXXXXXXXXX
+The way JH builds code is using notebooks, step by step.
+And then copy the cells use "Shift M" which takes two cells and combines them. 
+And removed the prose, so we can see the entire thing on one screen. 
+To get to the point where we can quickly do experiments with. 
+Then we may want to try a different approach to guidance free classification, or maybe to add some callbacks.  
+Have all the important code fit into one screen at once, and keep it all in my head. 
+
+JH was trying to understand the actual guidance free equation, how does it work?  
+Computer scientists tend to write things with long words as variable names; 
+mathematicians tend to use short words, just letters, normally. 
+To play around with stuff like that, JH turns stuff back into letters. 
+Started jutting down the equation and playing around with it to understand how it behaves.  
+“g” is called this  guidance scale. And then, rather than having  
+the unconditional and text embeddings, I just  call them “u” and “t”. 
+Now I've got this all down into an equation which I can write down in a notebook and play with 
+and understand exactly how it works. 
+Turn it into a form that I can manipulate algebraically more easily. 
+Try to make it look as much like the paper that I'm implementing  as possible. 
+
+This time for two prompts so we got back two pictures.
+  
+We then copied the whole thing and merged them all together and then just put it into a function.
+Took the little bit which creates an image and put that into a function.  
+Took the bit which does the tokenizing and text encoding and put that into a function. 
+Now all the code necessary fits in two cells, which makes it much easier to see exactly what's going on.  
+We have the text embeddings, the unconditional embeddings,  the embeddings which concatenate the two together, 
+optional random seed, latents. 
+And then the loop itself. 
+JH often creates longer lines so each line represents mathematically one thing to think about as a whole.   
+3 functions that fit on the screen and do everything.  
+Now `mk_samples()`  and display each image. 
+This is something to experiment with.
+TODO: Implement image to image, or negative prompts, or add callbacks.
+
+This is the end of our rapid  overview of Stable Diffusion and some recent papers.
+Next we are going right back to the start, learning how to multiply two matrices together, effectively,  
+and then gradually building from there until we rebuild all this from scratch,
+and we understand why things work the  way they do, understand how to debug problems,  
+improve performance and implement new research  papers, as well.

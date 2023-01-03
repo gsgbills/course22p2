@@ -1,0 +1,359 @@
+Lesson 11, Part B.  
+
+Back to Foundations 
+And so we were working on trying to the start of a forward pass of a linear model 
+or a simple  multi-layer perceptron for MNIST going. 
+We successfully created a basic tensor, and got some random numbers going. 
+We need to be able to multiply these things together, matrix multiplication. 
+Lets use a subset of MNIST, a matrix m1, which is just the first five digits. 
+We're going to  multiply `m1` by some weights `m2`, which are going to be 784 by 10 random numbers. 
+Every one of these 784 pixels is going to have a weight. 
+
+The first column, for example, is going to tell us all the weights in  order to figure out if something's a zero. 
+And the second column will have  all the weights in deciding the  probability of something's a one and so forth. 
+That's assuming we're just doing a linear model. 
+And so then we're going to multiply  these two matrices together.  
+When we multiply matrices together, we take row one of matrix one, 
+and we take column one of  matrix two, and we take each one in turn. 
+So we take this one and we take this one, we multiply them together. 
+And then we take this one and this  one, and we multiply them together. 
+And we do that for every element wise pair, and then we add them all up. 
+And that would give us the value for the very first cell. 
+
+We create random  numbers for the weights, since we're allowed to use random number generators now. 
+And for the bias, we'll just use a bunch of  zeros to start with. 
+So the bias is just  what we're going to add to each one. 
+
+For our matrix multiplication, we're going to do a little mini batch. 
+We're going to be doing five rows of images flattened out. 
+And then multiply by this weights matrix. 
+The shapes are: m1 is 5 by 784, m2 is 784 by 10. 
+We deconstruct the shapes into variables 'ar, ac, br, bc`, a good way to keep the indeces to loop through.  
+XXXXXXXXXXXXX
+So here's our results. So our resultant tensor,  
+well, we're multiplying together all  of these 784 things and adding them up. 
+So the resultant tensor is going to be 5 by 10. 
+And then each thing in here is the result  of multiplying and adding 784 pairs. 
+So the result here is going to start  with zeros and this is the result. 
+And it's going to contain ar rows,  five rows and bc columns, 10 columns,  5 comma 10. 
+So we have to fill that in. And so to do a matrix multiplication,  
+we have to first, we have to go  through each row one at a time. 
+And here we have that: go  through each row, one at a time,  
+and then go through each column, one at a time. And then we have to go through each pair  
+in that row column one at a time. So there's going to be a loop in a loop in a loop. 
+So here's going to loop over each row. And here we're going to loop over each column. 
+And then here we're going to loop —so each  column bc. And then here we're going to loop over   each column of a, which is going to be the same  as the number of rows of b, which we can see here,  
+ac: 784, br: 784, they're the same. So it wouldn't matter whether we said ac or br. 
+So then our result for that row and that column,  we have to add onto it the product of i, k in the  
+first matrix, by k, j in the second matrix. So k is going up through those 784. 
+And so we're going to go across the columns and  down, sorry, across the rows and down the columns. 
+So across the row, well, as  it goes down this column. 
+So here is the world's most naive, slow,  uninteresting matrix multiplication. 
+And if we run it, okay, it's done something. We have successfully, apparently, hopefully  
+successfully, multiplied the matrices m1 and m2. It's hard to read this, I find, because  
+punch cards used to be 80 columns wide. We still assume screens are 80 columns wide.  Everything defaults to 80 wide, which is  ridiculous, but you can easily change it. 
+So if you say set_print_options,  you can choose your own line width. 
+You can see, well, we know that's 5 by 10. We did it before.  So if we change the line width,  okay, that's much easier to read now. 
+You can see here are the 5 rows and here are  the 10 columns for that matrix multiplication. 
+I tend to always put this  at the top of my notebooks   and you can do the same thing for NumPy as well. 
+So what I like to do, this is really important,  is when I'm working on code, particularly numeric  
+code, I like to do it all step by step in Jupyter. And then what I do is once I've got it working is  
+I copy all the cells that have implemented  that and I paste them and then I select them  
+all and I hit shift+M to merge, get rid of  anything that prints out stuff I don't need. 
+And then I put a header on the  top, give it a function name,  
+and then I select the whole lot and I hit  control or Apple right square bracket and  
+I've turned it into a function. But I still keep the stuff above   it so I can see all the step by step  stuff for learning about it later. 
+And so that's what I've done  here to create this function. 
+And so this function does exactly  the same things we just did.  And we can see how long it  takes to run by using %time. 
+And it took about half a second,  which gosh, that's a long time  
+to generate such a small matrix. This is just to do five MNIST digits. 
+So that's not going to be great. We're going to have to speed that up. 
+I'm actually quite surprised at how slow  that is because there's only 39,200. 
+So if you look at how we've got a loop within  a loop within a loop, a loop within a loop  
+within a loop, it's doing 39,200 of these. So Python, yeah, Python, when you're just  
+doing Python, it is slow. So we can't do that.  That's why we can't just write Python. But there is something that kind  
+of lets us write Python. We could instead use Numba. 
+Numba is a system that takes Python and  turns it into basically into machine code. 
+And it's amazingly easy to do. You can basically take a function  
+and write njit, @njit on top. And what it's going to do is it's going to  
+look at —the first time you call this function,  it's going to compile it down to machine code  
+and it will run much more quickly. So what I've done here is I've taken the  
+innermost loop. So just looping through and adding up all these. 
+So start at zero, go through and add up all  those just for two vectors and return it. 
+This is called a dot product in linear algebra. So we'll call it dot. 
+And so Numba only works with  NumPy, doesn't work with PyTorch.  So we're just going to use arrays  instead of tensors for a moment. 
+Now have a look at this.  If I try to do a dot product of 1, 2,  3 and 2, 3, 4, it's pretty easy to do. 
+It took a fifth of a second,  which sounds terrible.  But the reason it took a fifth of a  second is because that's actually how  
+long it took to compile this and run it. Now that it's compiled, the second time,  
+it just has to call it. It's now 21 microseconds.  And so that's actually very fast. So with Numba, we can basically make  
+Python run at C speed. So now the important thing to  
+recognize is if I replace this loop in Python with  a call to dot, which is running in machine code,  
+then we now have one, two loops  running in Python, not three. 
+So our 448 milliseconds. Well, first of all, let's make sure if I run it,  
+run that matmul, it should be close to my t1. t1 is what we got  
+before, remember? So when I'm refactoring or  performance improving or whatever, I always like  
+to put every step in the notebook and then test. So this test_close() comes from fastcore.test and  
+it just checks that two things are very similar. They might not be exactly the same because of   little floating point differences, which is fine. Okay. 
+So our matmul is working correctly, or at  least it's doing the same thing it did before.  So if we now run it, it's taking 268  microseconds, okay, versus 448 milliseconds. 
+So it's taking about 2,000 times faster  just by changing the one innermost loop. 
+So really all we've done is we've added  @njit to make it 2,000 times faster. 
+So Numba is well worth knowing about. It can make your Python code very, very fast. 
+Okay. Let's keep making it faster. 
+So we're going to use stuff again,  which kind of goes back to APL. 
+And a lot of people say that learning  APL is a thing that's taught them   more about programming than anything else. So it's probably worth considering learning APL. 
+And let's just look at these various things. We've got a is 10, 6, -4. 
+So remember at APL, we don't say equals. Equals actually means equals funnily enough.  We, to say set to, we use this arrow  and it's a, this is a list of 10, 6, 4. 
+Okay. And then b is 2, 8, 7. 
+Okay. And we're going to add them up a+b.  
+So what's going on here? So it's  really important that you can think of  
+a symbol like a as representing a tensor  or an array. APL calls them arrays, Pytorch  
+calls them tensors, NumPy calls them arrays. They're the same thing.  So this is a single thing that  contains a bunch of numbers. 
+This is an operation that  applies to arrays or tensors.  And what it does is it works  what's called element wise. 
+It takes each pair 10 and 2 and adds them  together, each pair 6 and 8, add them together. 
+This is element wise addition. And Fred's asking in the chat, how do you put,   put in these symbols? If you just mouse over  any of them, it will show you how to write it. 
+And the one you want is  the one at the very bottom.  The very bottom, which is  the one where it says prefix. 
+Now the prefix is the backtick character. So here it's saying prefix hyphen gives us times. 
+So if I type P hyphen, there we go. So I've got a   back tick dash b is a x b for example. So yeah, they all have shortcut keys, which you  
+learn pretty quickly. I find.  And there's a fairly consistent kind  of system for those shortcut keys too. 
+All right. So we can do the same thing in PyTorch.  It's a little bit more verbose in PyTorch,  which is one reason I often like to do  
+my mathematical fiddling around in APL. I can often do it with less boilerplate,  
+which means I can spend more time thinking, you  know, I can see everything on the screen at once.  I don't have to spend as much time trying  to like ignore the tensor around bracket  
+square bracket dot comma blah, blah, blah. It's all cognitive load, which I'd rather ignore.  But anyway, it does the same thing. So I can say a + b and it works exactly like APL. 
+So here's an interesting example. I can go (a < b).float().mean(). 
+So let's try that one over here. a < b. So this is a really important   idea, which I think was invented by Ken  Iverson, the APL guy, which is the true  
+and false represented by zero and one. And because they're represented by  
+zero and one, we can do things to them. We can add them up and subtract them and so forth. 
+It's a really important idea. So in this case, I want to take the mean of them  
+and I'm going to tell you something amazing, which  is that in APL, there is no function called mean. 
+Why not? That's because we can  write the mean function, which  
+is… so that's four letters, mean, m-e- a-n. We can write the mean function from scratch  
+with four characters. I'll show you.  Here's the whole mean function. We're going to create a function  
+called mean and the mean is equal to the sum  of a list divided by the count of a list. 
+So this here is sum divided by count. And so I have now defined a new function   called mean, which calculates the mean,  mean of a is less than b. There we go. 
+And so, you know, in practice, I'm not sure  people would even bother defining a function   called main because it's just as easy to  actually write its implementation in APL.  
+In NumPy or whatever Python, it's going to take  a lot more than four letters to implement mean. 
+So anyway, it's, you know, it's a math notation. And so being a math notation, we can do a lot   with little, which I find helpful because  I can see everything going on at once. 
+Anywho. Okay.  So that's how we do the same thing in PyTorch. And again, you can see that the less than in both  
+cases are operating element wise. Okay.  So a is less than b is saying 10 is less than 2, 6  is less than 8, 4 is less than 7 and gives us back  
+each of those trues and falses as zeros and ones. And according to the emoji on our YouTube chat,  
+Siva's head just exploded as it should. This is why APL is life changing. 
+Okay. Let's now go up to higher ranks.  So this here is a rank one tensor. So a rank 1 tensor means it's a list of things. 
+It's a vector. It's where else   a rank 2 tensor is like a list of lists. They all have to be the same length lists,  
+or it's like a rectangular bunch of numbers  and we call it, in math, we call it a matrix.  So this is how we can create a tensor  containing 1, 2, 3 4, 5, 6 7, 8, 9. 
+And you can see often what I like to do  is I want to print out the thing I just   created after I created it. So two ways to do it. 
+You can say, put an enter and then  write m and that's going to do that.  Or if you want to put it all on  the same line, that works too. 
+You just use a semicolon. Neither one's better than the other.  They're just different. So we could do the same thing in APL. 
+Of course, in APL, it's going to be much easier. So we're going to define a matrix called m  
+which is going to be a 3 by 3 tensor  containing the numbers from 1 to 9. 
+Okay and there we go. That's done it in APL.  A 3 by 3 tensor containing  the numbers from 1 to 9. 
+A lot of these ideas from APL you'll find have  made their way into other programming languages.  For example, if you use Go,  you might recognize this. 
+This is the Iota character  and Go uses the word Iota. 
+They spell it out in a somewhat similar way.  A lot of these ideas from APL have found  themselves into math notation and other languages. 
+It's been around since the late 50s. Okay so here's a bit of fun. 
+We're going to learn about a new thing that  looks kind of crazy called Frobenius norm. 
+And we'll use that from time to time  as we're doing generative modeling.  And here's the definition of a Frobenius norm. It's the sum  
+over all of the rows and columns of a matrix. And we're going to take each one and square it. 
+We're going to add them up and  they're going to take the square root.  And so to implement that in PyTorch is as simple  as going n times m dot sum dot square root. 
+So this looks like a pretty complicated  thing when you kind of look at it at first. 
+It looks like a lot of squiggly business. Or if you said this thing here, you might be   like, what on earth is that? Well now you  know it's just square, sum, square root. 
+So again, we could do the same thing in APL. 
+So let's do, so in APL we want the, okay, so  we're going to create something called sf. 
+Now it's interesting, APL does  this a little bit differently.  So dot sum by default in  PyTorch sums over everything. 
+And if you want to sum over just one dimension,  you have to pass in a dimension keyword. 
+For very good reasons APL is the opposite. It just sums across rows or just down columns. 
+So actually we have to say sum up the flattened   out version of the matrix and to  say flattened out you use comma. 
+So here's sum up the flattened  out version of the matrix. 
+Okay so that's our sf, oh sorry, and  the matrix is meant to be m times m. 
+There we go. So there's the same thing.  Sum up the flattened out m by m matrix. 
+And another interesting thing about  APL is it always is read right to left.  There's no such thing as operator  precedence, which makes life a lot easier. 
+Okay and then we take the square root of that.  There isn't a square root function,  so we have to do to the power of 0.5. 
+And there we go, same thing. All right, you get the idea.  Yes, so very interesting  question here from mariboo. 
+Are the bars for norm or absolute value,  and I like Siva's answer, which is the norm  
+is the same as the absolute value for a scalar. So in this case you can think of it as absolute   value and it's kind of not needed  because it's being squared anyway. 
+But yes, in this case the norm, well in every case  for a scalar the norm is the absolute value, which  
+is kind of acute discovery when you realize it. So thank you for pointing that out Siva. 
+All right, so this is just  fiddling around a little bit to   kind of get a sense of how these things work. So really importantly, you can index into a  
+matrix and you'll say rows first and then columns. And if you say colon, it means all the columns. 
+So if I say row 2, here it  is row 2, all the columns,  
+sorry, this is row 2, so that's 0 —APL starts  at 1 or the columns that's going to be 7, 8, 9. 
+And you can see, I often use comma to print  out multiple things and I don't have to say   print in, in Jupiter. It's kind of assumed. 
+And so this is just a quick way of printing out  the second row and then here, every row column 2. 
+So here is every row of column 2. And here you can see 3, 6, 9. 
+So one thing very useful to recognize is that for  tensors of higher rank than 1, such as a matrix,  
+any trailing colons are optional. So you see this here, m[2],  
+that's the same as m[2, :]. It's really important to remember.  So m[2], you can see the result is the same. So that means row 2, every column. 
+So now with all that in place,   we've got quite an easy way. We don't need a number anymore. 
+We can multiply. So we can get  rid of that innermost loop.  So we're going to get rid of this loop because  this is just multiplying together all of the  
+corresponding rows of a with the, sorry, all the  corresponding colons of a row of a with all the  
+corresponding rows of a column of b. And so we  can just use an element wise operation for that. 
+So here is the ith row of a, and here is the jth  column of b And so those are both, as we've seen,  
+just vectors, and therefore we can do an element  wise multiplication of them and then sum them up. 
+And that's the same as a dot product. So that's handy. 
+And so again, we'll do test_close. Okay.  It's the same. Great.  And again, you'll see, we kind of  did all of our experimenting first,  
+right? To make sure we understood how  it all worked and then put it together.  And then if we time it: 661 microseconds. Okay. 
+So it's interesting. It's actually slower than, which really   shows you how good Numba is, but it's certainly  a hell of a lot better than our 450 milliseconds. 
+But we're using something that's  kind of a lot more general now. 
+This is exactly the same  as dot as we've discussed.  So we could just use torch dot,  torch.dot(), I suppose I should say. 
+And if we run that, okay. Little faster.  It's still, interestingly, it's still slower  than the Numba, which is quite amazing actually. 
+All right. So that's… that   one was not exactly a speed up, but it's  kind of a bit more general, which is nice. 
+Now we're going to get something into  something really fun, which is broadcasting. 
+And broadcasting is about what if you have arrays  with different shapes? So what's a shape? The  
+shape is the number of rows or the number of rows  and columns or the number of, what would you say,  
+faces, rows and columns and so forth. So for example, the shape of m is 3 by 3. 
+So what happens if you multiply or add or do  operations to tensors of different shapes?  
+Well, there's one very simple one, which is  if you've got a rank 1 tensor, the vector,  
+then you can use any operation with a scalar  and it broadcasts that scalar across the tensor. 
+So a > 0 is exactly the same as saying  a is greater than tensor([0, 0, 0])  
+So it's basically copying that across three times. Now it's not literally making a copy in memory,  
+but it's acting as if we had said that. And this is the most simple version of   broadcasting. Okay. 
+It's broadcasting the 0 across the 10 and the 6  and the -4 and APL does exactly the same thing. 
+A < 5, so 0, 0, 1. So it's the same idea. 
+Okay. So we can do plus with a scalar and we can do  
+exactly the same thing with higher than rank one. So two times a matrix is just going to do:   two is going to be broadcast across  all the rows and all the columns. 
+Okay. Now it gets interesting.  So broadcasting dates back to APL, but a really  interesting idea is that we can broadcast not  
+just scalars, but we can broadcast vectors across  matrices or broadcast any kind of lower ranked  
+tensor across higher rank tensors, or even  broadcast together two tensors of the same rank,  
+but different shapes and a really powerful way. And as I was exploring this, I was trying to,  
+I love doing this kind of computer archeology. I was trying to find out where   the hell this comes from. But it actually turns out from this email  
+message in 1995 that the idea actually comes from  a language that I'd never heard of called Yorick,  
+which still apparently exists. Here's Yorick. 
+And so Yorick has talked about  broadcasting and conformability.  So what happened is this very obscure  language has this very powerful idea  
+and NumPy has happily stolen the idea from  Yorick that allows us to broadcast together  
+tensors that don't appear to match. So let me give an example.  Here's a tensor called c that's a vector. It's a rank 1 tensor, 10, 20, 30, and here's  
+a tensor called m, which is a matrix. We've seen this one before,   and one of them is shape 3 comma 3. The other is shape 3. 
+And yet we can add them together. 
+Now, what's happened when we added  it together? Well what's happened  
+is 10, 20, 30 got added to 1, 2, 3, and then  10, 20, 30 got added to 4, 5, 6, and then 10,   20, 30 got added to 7, 8, 9. And hopefully you can  
+see this looks quite familiar. Instead of broadcasting a scalar over a  
+higher rank tensor, this is broadcasting  a vector across every row of a matrix. 
+And it works both ways, so we can say  c + m gives us exactly the same thing. 
+And so let me explain what's  actually happening here.  The trick is to know about this somewhat  obscure method called expand_as(). 
+And what expand_as() does is this  creates a new thing called t,   which contains exactly the same thing  as c, but expanded or kind of copied  
+over so it has the same shape as  m. So here's what t looks like.  Now t contains exactly the same thing as c  does, but it's got three copies of it now. 
+And you can see we can definitely  add t to m because they match shapes. 
+So we can say m plus t, we know we can play  m plus t because we've already learned that  
+you can do element wise operations on  two things that have matching shapes. 
+Now by the way, this thing t didn't  actually create three copies.  Check this out. If we call t dot storage,  
+it tells us what's actually in memory. It actually just contains the numbers 10, 20, 30,  
+but it does a really clever trick. It has a stride of 0 across the  
+rows and a size of 3 comma 3. And so what that means is that   it acts as if it's a 3 by 3 matrix. And each time it goes to the next row,  
+it actually stays exactly where it is. And this idea of strides is the trick  
+which NumPy and PyTorch and so forth use for all  kinds of things where you basically can create  
+very efficient ways to do things like expanding or  to kind of jump over things and stuff like that,  
+switch between columns and rows, stuff like that. Anyway, the important thing here for us to   recognize is that we didn't actually make a copy. We made it completely efficient and it's all  
+going to be run in C code very fast.  So remember this expand_as is critical. This is the thing that will teach you to  
+understand how broadcasting works, which  is really important for implementing deep  
+learning algorithms or any kind of  linear algebra on any Python system  
+because the NumPy rules are used exactly the same  in JAX, in TensorFlow, in PyTorch and so forth. 
+Now I'll show you a little trick, which  is going to be very important in a moment.  If we take c, which remember is  a vector containing 10, 20, 30,  
+and we say .unsqueeze(0), then it  changes the shape from 3 to 1 comma 3. 
+So it changes it from a vector of length  3 to a matrix of 1 row by 3 columns. 
+This will turn out to be  very important in a moment.  And you can see how it's printed. It's printed out with two square brackets. 
+Now I never use unsqueeze because I much  prefer doing something more flexible,   which is if you index into an access with a  special value, None, also known as np.newaxis(),  
+it does exactly the same thing. It inserts a new axis here.  So here we'll get exactly the same thing,  1 row by all the columns, 3 columns. 
+So this is exactly the same as saying unsqueeze.  So this inserts a new unit axis. This is a unit axis, a single row  
+in this dimension, and this does the same thing. So these are the same. 
+So we could do the same thing and say,  unsqueeze(1), which means now we're  
+going to unsqueeze into the first dimension. So that means we now have 3 rows and 1 column. 
+See the shape here, the shape is inserting a  unit axis in position 1, 3 rows and 1 column. 
+And so we can do exactly the same thing here. Give us every row and a new unit axis  
+in position 1, same thing. So those two are exactly the same. 
+So this is how we create a matrix with 1 row. This is how we create a matrix with 1 column. 
+None comma colon versus colon  comma None or unsqueeze. 
+We don't have to say, as we've learned before,  None comma colon, because, do you remember?  
+Trailing colons are optional.  So therefore just c[None] is also going  to give you a row matrix, 1 row matrix. 
+This is a little trick here. If you say dot, dot, dot,   that means all of the dimensions. And so dot, dot, dot comma None will  
+always insert a unit axis at the end,  regardless of what rank a tensor is. 
+So yeah, so None and np new  mean exactly the same thing.  np newaxis is actually a synonym for None. If you've ever used that, I always use None  
+because why not? Short and simple. So here's something interesting.  If we go c[:, None], so let's go and  check out what c[:, None] looks like. 
+c[:, None] is a column. 
+And if we say expand as m, which is 3  by 3, then it's going to take that 10,   20, 30 column and replicate it. 10, 20, 30; 10, 20, 30; 10, 20, 30. 
+So we could add, so remember like, well, remember  I will explain that when you say matrix plus  
+c[:, None], it's basically going  to do this .expand_as() for you. 
+So if I want to add this matrix here to m,   I don't need to say .expand_as() I just  write this, I just write m + c[:, None]. 
+And so this is exactly the same as doing m + c,  but now rather than adding the vector to each row,  
+it's adding the vector to each column. So you plus 10, 20, 30; 10, 20, 30; 10, 20, 30. 
+So that's a really simple way that we now get kind  of a free, thanks to this really nifty notation. 
+There's a nifty approach that came from Yorick. So here you can see m + c[None, :] is adding 10,  
+20, 30 to each row and m + c[:, None]  is adding 10, 20, 30 to each column. 
+All right, so that's the  basic like hand wavy version.  So let's look at, like, what are  the rules and how does it work?  
+Okay, so c[None, :] is 1 by 3. c[:, None] is 3 by 1. 
+What happens if we multiply c[None, :] by c[:,  None]? Well it's gonna do, if you think about it,  
+which you definitely should,  cause thinking's very helpful. 
+What is going on here? Oh, took forever. 
+Okay, so what happens if we go c[None, :] times  c[:, None]? So what it's gonna have to do is  
+it's gonna have to take this 10, 20, 30 column  vector or 3 by 1 matrix, and it's gonna have to  
+make it work across each of these rows. So what it does is expands it to be 10,  
+20, 30; 10, 20, 30; 10, 20, 30. So it's gonna do it just like this. 
+And then it's gonna do the  same thing for c[None, :].  So that's gonna become three rows of 10, 20, 30. So we're gonna end up with 3 rows of 10, 20, 30  
+times 3 columns of 10, 20,  30, which gives us our answer. 
+And so this is gonna do an outer product. So it's very nifty that you can actually  
+do an outer product without any special  functions or anything just using broadcasting. 
+And it's not just outer products. You can do outer Boolean operations.  And this kind of stuff comes up  all the time, right? Now remember,  
+you don't need the comma colon, so get rid of it. So this is showing us all the places where  
+it's greater than, it's kind of an outer  Boolean, if you wanna call it that. 
+So this is super nifty and you can do all kinds of  tricks with this because it runs very, very fast. 
+So this is gonna be accelerated in C. So here are the rules. 
+When you operate on two arrays of tensors,  NumPy and PyTorch will compare their shapes. 
+So remember the shape, this is a shape. You can tell it's a shape because we said shape  
+and it's goes from right to left. So that's the trailing dimensions. 
+And it checks whether dimensions are compatible. Now they're compatible if they're equal,   right? So for example, if we say m * m,  then those two shapes are compatible because  
+in each case, it's just gonna be 3,  right? So they're gonna be equal.  So if the shape in that dimension  is equal, they're compatible. 
+Or if one of them is 1. And if one of them is 1,   then that dimension is broadcast to  make it the same size as the other. 
+So that's why the outer product worked. We had a 1 by three times a 3 by 1. 
+And so this 1 got copied 3  times to make it this long.  And this 1 got copied 3  times to make it this long. 
+Okay, so those are the rules. So the arrays don't have to   have the same number of dimensions. So this is an example that comes up all the time. 
+Let's say you've got a 256 by 256  by 3 array or tensor of RGB values.  So you've got an image in  other words, a color image. 
+And you want to normalize it. So you want to scale each color   in the image by a different value. So this is how we normalize colors. 
+So one way is you could multiply  or divide or whatever, multiply   the image by a 1 dimensional array with 3 values. 
+So you've got a 1D array. So that's just 3.  Okay. And then the image is 256 by 256 by 3. 
+And we go right to left, and we check  are they the same? We say yes, they are. 
+And then we keep going left and we say  are they the same? And if it's missing,   we act as if it's one. And if we keep going,  
+if it's missing, we act as if it's one. This is going to be the same as doing 1 by 1 by 3. 
+And so this is going to be broadcast,  these 3 elements will be broadcast  
+over all 256 by 256 pixels. So this is a super fast and  
+convenient and nice way of normalizing  image data with a single expression.  And this is exactly how we do it  in the fastai library, in fact. 
+So we can use this to dramatically  speed up our matrix multiplication. 
+Let's just grab a single  digit, just for simplicity.  And I really like doing this in Jupyter Notebooks. And if you build Jupyter Notebooks to explain  
+stuff that you've learned in this course or ways  that you can apply it, consider doing this for   your readers, but add a lot more prose. I haven't added prose here because I  
+want to use my voice. If I was, for example,   in our book that we published, it's all written in  notebooks and there's a lot more prose, obviously. 
+But like really, I like to show every example  all along the way using simple as possible. 
+So let's just grab a single digit. So here's the first digit.  So its shape is, it's a 784 long vector. Okay. 
+And remember that our weight matrix is 784 by 10. 
+Okay. So if we say digit[:, None] dot shape,  
+then that is a 784 by 1 row matrix. Okay. 
+So there's our matrix. And so if we then  
+take that 784 by 1 and expand as m2, it's going  to be the same shape as our weight matrix. 
+So it's copied our image data for  that digit across all of the 10  
+vectors representing the 10 kind of linear  projections we're doing for our linear model. 
+And so that means that we  can take the digit[:, None].  So 784 by 1 and multiply it by the weights. And so that's going to get us back 784 by 10. 
+And so what it's doing, remember,  is it's basically looping through   each of these 10 784 long vectors. 
+And for each one of them, it's  multiplying it by this digit. 
+So that's exactly what we want to  do in our matrix multiplication. 
+So originally we had, well, not originally,  most recently, I should say, we had this  
+dot product where we were actually looping over  j, which was the columns of b. So we don't have  
+to do that anymore because we can do it all  at once by doing exactly what we just did.  So we can take the ith row and all the  columns and add an axis to the end. 
+And then just like we did here,  multiply it by b. And then dot sum. 
+And so that is, again, exactly the same thing. That is another matrix multiplication,  
+doing it using broadcasting. Now this is, like, tricky to get your head around. 
+And so if you haven't done this  kind of broadcasting before,   it's a really good time to pause the  video and look carefully at each of these  
+four cells before and understand what did I do  there? Why did I do it? What am I showing you?  
+And then experiment with trying to, and  to remember that we started with m1[0],  
+right? So just like we have here a[i]I. So that's why we've got [i, :, None] , because  
+this digit is actually m1[0]. This is like m1, zero, colon, none. 
+So this line is doing exactly the  same thing as this here, plus a sum. 
+So let's check if this matmul is the same  as it used to be, yet it's still working.  And the speed of it, okay, not bad. So 137 microseconds. 
+So we've now gone from a time from 500  milliseconds to about 0.1 milliseconds. 
+Funnily enough on my, oh, actually now I  think about it, my MacBook Air is an M2,   whereas this Mac Mini is an M1. So that's a little bit slower. 
+So my Air was a bit faster than 0.1 milliseconds.  So overall, we've got about a  5,000 times speed improvement. 
+So that is pretty exciting. And since it's so fast now,   there's no need to use a mini batch anymore. If you remember, we used a mini batch of,  
+where is it, of five images. But now we can actually use the  
+whole data set because it's so fast. So now we can do the whole data set. 
+There it is. We've now got 50,000 by 10,   which is what we want. And so it's taking us only 656  
+milliseconds now to do the whole data set. So this is actually getting to a point now   where we could start to create and train some  simple models in a reasonable amount of time. 
+So that's good news. All right. 
+I think that's probably a  good time to take a break.  We don't have too much more of this to go,  but I don't want to keep you guys up too late. 
+So hopefully you learned something  interesting about broadcasting today.  I cannot overemphasize how widely useful this is  in all deep learning and machine learning code. 
+It comes up all the time. It's basically our   number one most critical kind  of foundational operation. 
+So yeah, take your time practicing it  and also good luck with your diffusion  
+homework from the first half of the lesson. Thanks for joining us and I'll see you next time.

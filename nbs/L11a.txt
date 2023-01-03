@@ -1,0 +1,419 @@
+Lesson 11 2022 - Part One - Reading the DiffEdit paper.
+
+Only going to show you a tiny fraction of the cool stuff that's been happening on the  forum this week, but it's been amazing. 
+I'm going to start by sharing a beautiful video from John Robinson, (Notebook TreeDifussion). 
+It's very stable and shows a beautiful movement between seasons. 
+JH suggested trying interpolating between prompts, and try using the last  image of the previous 
+prompt interpolation as the initial image for the next prompt.  
+Later John Robinson, on the forum said, oh, actually, that tree video doesn't actually do what we think it does at all. 
+There's a bug in his code, and despite the bug, it  accidentally worked really well. 
+Now he is trying to figure out how did it create such a beautiful video by mistake? 
+Reverse engineering what a bug did and then figuring out how to do that more intentionally. 
+Bugs often tell us about new ideas. 
+
+SCALING the text embeddings
+@sebderhy, Sebastian, noticed a problem of scale with that the update:  
+unconditional embeddings plus guidance times text embeddings minus unconditional embeddings  
+`[u + g * (t - u)]`, gets big. 
+Lets have a couple of vectors, u and t, and then we add to that some amount of t-u. 
+Draw the vector difference between those to see (t-u).
+If there's a big difference between t and u, the eventual update g*(t-u) 
+is far bigger than the original update, so it jumps too far. 
+
+To ensure that the update is no longer than the original unconditioned update would have been,
+by scaling it by the ratio of the norms. 
+This improves images: we start with this astronaut and we move to this astronaut. 
+A subtle change, but there's a lot more texture in the background, Earth detail, etc.
+So it made quite a big difference to get this scaling correct. 
+Some of the changes resulted in changing the image, e.g., the horse used to be missing a leg.
+
+We started with `[u + g * (t - u)]` 
+unconditioned prompt plus the guidance times the difference between the conditional and unconditioned. 
+Next is to take that prediction and scale it according to the difference in the lengths. 
+The norms is the length of a vector. 
+Looking at the second image in Lesson 9, from 1a to 1b, 
+a boot now has texture, there are proper stars in the sky. 
+It's made a really big difference.  
+
+The second change is not just to rescale the whole prediction, but to rescale the update. 
+To rescale the update changes the image entirely because it is now changing the direction it goes. 
+Is this an improvement?  
+This was the difference that  added the correct fourth leg to the horse before. 
+
+Then we do both: rescale the difference and then rescale the result. 
+Then we get the best of both worlds. 
+We get a nice background, weird thing become an arm, the foot improves, details make a difference.  
+After JH shared on Twitter, Sebastian's approach, Ben Poole, from Google Brain,   
+pointed out that this already exists, it's the same as what's shown in the paper
+"Guided TTS: A Difussion Model for Text-to-Speech".  
+JH hasn't read the paper yet to check whether it's got all the different options, etc.
+Maybe this is reinventing something that already existed and putting it into a  new field, which would still be interesting. 
+Folks on the forum help figure out whether this paper is showing the same thing or not. 
+ 
+Rekil Prashanth: What if we take the guidance scale and rather than keeping it fixed at 7.5 all the time, let's reduce it. 
+Once the model knows roughly what image it's trying to draw, even if it's noisy, let it do its thing.  
+Let's decrease the guidance scale, so at the end, it's basically zero.  
+Once it is going in the  right direction, we let it do its thing. 
+So this little doggy is with  the normal 7.5 guidance scale. 
+Its eye is pretty uninteresting, pretty flat. 
+And the next one, has a proper eye. Before, totally glassy black, now proper eye.  
+This fur very  textured, previously very out of focus. 
+So this is a new technique.  
+
+Check out Alex's notes on the lesson, he's done a fantastic job of showing how to study a lesson. 
+He made  a list in his notes of all the different steps  we did as we started the From the Foundations. 
+What is the library that it comes  from, links to the documentation. 
+Alex's background is history, this is a great idea, to be able to look at what are all the things that  
+we have to learn and read about? 
+Also, he tried the lesson on a new data set, and picked the Fashion MNIST data set, 
+which we'll be using a lot, because it's a lot like MNIST, and different enough to be interesting. 
+He described in his post or his notes, how he went about doing that. 
+And he jotted down JH tips, a good way to make sure we don't forget about all the little tricks. 
+
+Johno taught us about an interesting new paper called DiffEdit.
+Lets try reading this paper together, so lets get it from arXiv a preprint server. 
+So these are papers that have not been peer reviewed. 
+We have code, we can try it, we can see things, whether it works or not, and it gets "peer review" on Twitter.  
+So if there's a problem, generally within 24 hours, somebody has pointed it out. 
+From arXiv we can save to Zotero, free software to manage readings, has a Chrome connector on the Chrome menu bar. 
+After download the paper will automatically appear in Zotero, with details: abstract, authors, URL, etc. 
+Later we can go back and see the URL.  
+Double click on it to bring up the paper. 
+In Zotero we can annotate papers, edit them, tag them, put them in folders, and add them to 
+a reading list directly from a web browser. 
+JH started a diffusion folder as a group library shared with other folks working on the fast diffusion project.
+Zotero is better than Mendeley.  
+ 
+Reading a paper, the goal is not to understand every word. 
+The goal is to understand the basic idea well enough that, 
+when we look at the code we can see how the code matches to it.
+And try writing our own code to implement parts of it. 
+So over on the left, you can  open up the sidebar here. 
+Open up the table of  contents and get a bit of a sense of it.
+There's some experimental and theoretical results, Introduction, Related work, what is DiffEdit thing, some experiments. 
+Standard approach to what we see in papers. 
+Always start with the abstract, what's it saying this does? 
+Generally a background sentence or two about how interesting this field is, e.g., "image generation is cool".
+Then they're going to tell us what they're going to do, create something called DiffEdit. 
+What is it for? It's going  to use text condition diffusion models.  
+So we know what those are now, since we've been using them.
+That's where we type in some text and get  back an image of that, that matches the text. 
+This is going to be different. 
+The goal is to edit an  image based on a text query. 
+We're going to edit an image based on text. 
+How? With "Semantic image editing", an extension of image generation with an additional constraint, 
+that the generated image should be as similar as possible to the given input. 
+And there's going to be a picture that shows us what's going on. 
+And so in this picture there is an input image, originally attached to a caption "A bowl of fruits". 
+We want to change it into "A bowl of pears".  
+We type the new caption and it generates it.
+Another example, we could change it from a bowl of fruit to a basket of fruits.
+  
+The idea is that we can edit an image by typing what we want that image to represent. 
+The abstract says that current ways of doing this require you to provide a mask,
+i.e., to draw the area to be replaced.  
+The main contribution of this paper is to automatically generate the mask. 
+So they simply type in the new query and get the new image.  
+Seems impressive. 
+After reading the abstract, and either skip the paper or look at the results.
+
+In this case, the results look amazing, so we should keep going. 
+"Achieves state-of-the-art editing performance".  
+
+The introduction to a paper tries to give a sense of what they're trying to do. 
+The first paragraph is repeating what we have already read in the  abstract, and what we see in figure one.  
+That we can take a text query, like a basket of fruits, see the examples. 
+We'll skip through there.  
+Academic papers are full of citations, do not expect to read all of them because if you do, 
+then to read each of those citations, that's full of citations and then they're full of citations. 
+Before you know it, you've read  the entire academic literature...
+So for now, let's just recognize  that it says text conditional image  generations undergoing revolution.  
+Here's some examples: DALL-E is cool. Latent Diffusion, that's what we've been using, Imagen.
+The area that we're working on is important, we agree so we can skip through it. 
+Vast amounts of data are used. 
+Diffusion models are interesting, they de-noise starting from Gaussian noise. 
+Once you are in the field, you can skip over pretty quickly. 
+You can guide it using CLIP guidance.
+New: Or by inpainting, by copy pasting pixel values outside a mask. 
+There's a new technique that we haven't done, but makes sense that is during that diffusion process. 
+If there are some pixels we don't want to change (e.g., the ones that aren't orange in Fig 1,
+we can just paste them from the original after each stage of the diffusion. 
+If we want to know more about that, we can always look at this paper,  but I don't think I do for now. 
+Repeating that they require us to provide a mask, which is a problem. 
+When we mask an area, that's a problem because, for example, to change a dog into a cat,
+you want to keep the animal's color and pose. 
+This new technique is not deleting the original, not deleting a section and replacing it with something else,
+but it's actually going to take advantage of knowledge about what that thing looked like. 
+At this point, we know what they're trying to achieve. 
+If we don't know what they're trying to achieve when we are reading a  paper,the paper won't make sense. 
+That's a point where we should stop, i.e., this is not the right time to be reading this paper. 
+Maybe we need to read some of the references, or look more at the examples, so we can skip straight to the experiments. 
+JH often skips straight to the experiments. 
+In this case, no need to because they've put enough experiments on the first page to see what it's doing.  
+Don't always read it from top to bottom.
+
+They've got some examples of conditioning a diffusion model on an input without a mask,
+e.g., can use a noise version of the input as a starting point. (we've done that too.)
+We've already covered a lot of the techniques that they're referring to here. 
+Something we haven't done is tp look at the distance to the input image as a loss function. 
+Makes sense and there are some references here.  
+
+The next section is related work, to tell us about other approaches.
+If we're doing a deep dive, this is a good thing to study carefully. 
+We are not going to do a deep dive right now, so we can skip over it. 
+We can do a quick glance... lots of interesting topics.  
+For image editing there are different techniques, eg CLIP guidance. 
+They can be computationally expensive. 
+We can use diffusion for image editing. 
+There's a lot of repetition in these papers as well, which is nice because we can skip over it pretty quickly. 
+More about the high computational costs. 
+They're saying this is going to be not so computationally expensive.
+Often at the very end of the related work is interesting,  
+where they talk about how somebody else has done “concurrent to ours”. 
+Somebody else is working at exactly the same time and they've looked at some different approach. 
+To do the best possible thing, you could study the  related work and get the best ideas from each. 
+
+Background is where it starts to look scary. 
+Mathematically, here's how the problem that we're trying to solve is set up. 
+We start by looking at Denoising Diffusion Probabilistic Models, DDPM. 
+Lesson 9B with Wasim and Tanishq has some of the math of DDPM. 
+Recognize that very few are going to look at these paragraphs of text and equations and "get it". 
+To understand DDPM, we need to read and study the original paper, 
+the papers it's  based on, watch videos and classes like this one. 
+After a while, you'll understand DDPM, then you'll be able to look at this section and say:
+"I see. They're just talking about this thing I'm already familiar with."
+This is meant to be a reminder of something that you already know. 
+It's not something you should  expect to learn from this section.
+The background  is often written last, tries to look smart for the reviewers. 
+
+Lets go through these equations somewhat briefly because every diffusion paper is going to have these equations. 
+We need to find out what the different letters/symbols mean, because they'll probably refer to them later. 
+Lets use this as a way to learn how to read math. 
+Must know the Greek alphabet because it's much easier to be able to actually read this to yourself. 
+The curly L is used for the loss function. 
+How do we find out what a symbol means?
+1. Use MathPix to select anything  on the screen and it will turn it into LaTeX. 
+LaTeX is written as actual stuff that we can search for on Google. 
+2. Download the source format of the paper, then open up that LaTeX and have a look at it. 
+3. Detexify is another great way to find symbols you don't know about. 
+So let's try it for that expectation. 
+So if you've got a Detexify and you draw the thing, it doesn't always work fantastically  well, 
+but sometimes it works very nicely. 
+Yeah, in this case, not quite. What about the double line thing?  
+It's good to know all the techniques, I guess. 
+I think it could do this one. 
+Part of the problem is there's so many options that in this case, it wasn't particularly helpful. 
+If we use a simple one like Epsilon, I think it should be fine. 
+There's a lot of room to improve this app actually, if anybody's interested in a project.  
+I think you could make it,  you know, more successful. 
+Sigma sum, that's cool.  
+
+For the two bars, we could try a few things. 
+Looking for two  bars (“||”), maybe math notation. 
+What does this mean in mathematics? 
+Here there's a glossary of mathematical symbols. 
+Here there's a meaning of this in math, it is a vector norm. 
+We can start looking for these things up. So we can say norm or maybe vector norm. 
+And so once you can actually find the term,  then we kind of know what to look for. 
+In our case, we've got this  surrounding all this stuff. 
+And then there's twos here and here. What's going on here? 
+If we scroll through. Oh, this is pretty close actually. 
+So two bars can mean a matrix norm,  otherwise a single for a vector norm. 
+And here's the definition, it's equal to root sum of squares. 
+So that's good to know. So this norm thing means a root sum of squares. 
+But then we've got a two up here, that just means squared.  
+This is a root sum of squares squared. 
+Well, the square of a square root is just the thing itself.  
+So the whole thing  is just the sum of squares. 
+ 
+What about the weird E thing? 
+ 
+E thing is? Okay, so our LaTeX  has finally finished downloading, it is \mathbb(E)
+\mathbb{E} is the expected value operator. 
+ 
+Also try a free version called pix2tex, to can snip  and convert to LaTeX, instead of paying for Mathpix. 
+The expected value of something is saying, what's the likely value of that thing? 
+For example,  let's say you toss a coin, which could be heads or it could be tails.  
+We want to know how often it's heads. 
+And so maybe we'll call heads one, tails zero. 
+So you toss it and you get a one, zero,  zero, one, one, zero, one, zero, one. 
+Okay. And so forth.  Right. And then you can calculate the mean of that. 
+Right. So if that's X, you can calculate X bar   the mean, which would be the sum of all  that divided by the count of all that. 
+So it'd be one, two, three, four, five, five  divided by one, two, three, four, five, six,  
+seven, eight, nine. Okay.  So that would be the mean. 
+But the expected value is like, what do you expect to happen? 
+We can calculate  that by adding up for all of the possibilities for each possibility X.  
+How likely is X and what score do you get if you  get X? So in this example of heads and tails,  
+our two possibilities is that we  either get heads or we get tails.  
+So if for the version where X is  heads, we get probability is 0.5  and the score, 
+if it's an X, I guess I  should use that, the score if it's an X  is going to be one. 
+And then what about   tails? 
+The tails, the probability is 0.5  and the score, if you get tails is zero. 
+And so overall the expected is  0.5 times one plus zero is 0.5. 
+So our expected score, if we're tossing  a coin is 0.5, if getting heads is a win. 
+ 
+Another example is we're rolling a die and we want to know  what the expected score is if we roll a die. 
+So again, we could roll it a bunch  of times and see what happens. 
+And so we could sum all that up, (as) before and divide it by the count. 
+And that'll tell us the mean  for this particular example.
+But what's the  expected value more generally?   
+It's the sum of all the possibilities of the  probability of each possibility times that score. 
+So the possibilities for rolling  a die is that you can get a one,  
+The probability of each one is a sixth. 
+And the score that you get is,  well, it's this, this is the score. 
+And so then you can multiply all these  together and sum them up, 
+which would be one  sixth plus two sixths plus three sixths plus four sixths plus five sixths plus six sixths. 
+And that would give you the expected value of  that particular thing, which is rolling a die. 
+
+This is telling us what are all the things that we're averaging it over that was the expectations over. 
+And so there's a whole lot of letters here, which we are not expected to just know what they are.  
+In fact, in every paper, they could mean different things.  
+So immediately underneath where they'll be defined. 
+So X0 is an an input image, Epsilon is the noise has a mean of 0  and a standard deviation of I, 
+it's like a standard deviation of one when you're doing multiple normal variables. 
+Epsilon-theta is a noise estimator, it's a function. 
+We can tell it's a function as it's got parentheses and stuff right next to it.  
+Presumably most functions like this (in these papers) are neural networks. 
+
+We are finally at a point where this makes sense. 
+We've got the noise and the prediction of that noise. 
+We subtract one from the other, square it and take the expected value. 
+In other words, this is mean squared error, i.e., the loss function is MSE. 
+
+Xt is the original unnoised image (X0) times some number plus some noise times one minus that number. 
+This is the thing where we reduce the value of each pixel and we add noise to each pixel.  
+The equations do actually make sense, but it is background, telling what already exists,
+what a DDPM is, and what a DDIM is. 
+DDIM is a more recent version of DDPM.  
+It's some very minor changes to the way it's set up, which allows us to go faster. 
+Once we keep reading, we find that none of this background actually matters. 
+For the purpose of our background, it's enough to know that DDPM and DDIM  are foundational papers 
+on which diffusion models today are based. 
+
+The encoding process, which encodes an image onto a latent variable, and then adding noise. 
+This is called DDIM encoding. 
+And the thing that goes from the input image to the noise image, they're going to call capital Er. 
+And r is the encoding ratios.
+That's going to be something like  how much noise are we adding. 
+If you use small steps, then decoding that. 
+So going backwards gives you back the original image. 
+That's what diffusion models are. 
+
+This looks like a very useful picture. 
+DiffEdit has three steps. 
+Step one. We add noise to the input image. Here's our input image X0, we add noise to it and then we denoise it. 
+But we denoise it twice. One time we denoise it using the reference text R: horse,
+and another means nothing, so it is unconditional or horse. 
+We do it once using the word horse. 
+So we take this and we decode it, estimate the  noise, and then we can remove that noise on the  
+assumption that it's a horse. 
+
+Then we do it again, but the second time we do that noise, when we calculate the noise, 
+we pass in our query Q, which is zebra. 
+Those are going to be very different noises. 
+The noise for horse is going to be these Gaussian pixels. 
+These are all dots because it is a horse.  
+But if the claim is no, this is actually a zebra, then all of these pixels here are all wrong. 
+They're all the wrong color.  
+So the noise that's calculated, if we say this is our query, 
+it's going to be totally different to the noise if we say this is our query. 
+Then we take one minus the other, and here it is here. 
+So “we derive a mask based on the difference in the denoising results”. 
+And then you take that and binarize it, i.e., turn that into ones and zeros. 
+That is the key idea, that once we have a diffusion model that's trained,  
+you can do inference on it where you tell it the truth about what the thing is, 
+and then you can  do it again, but lie about what the thing is. 
+And in the lying version, all the stuff that doesn't match zebra must be noise.  
+
+The difference between the noise prediction when we say zebra 
+versus the noise  prediction when we say horse,
+will be all the pixels that it says, no, these pixels are not zebra. 
+But the rest of it, it's fine, as there's nothing particularly about the 
+background that wouldn't work with a zebra. 
+
+Step 2 is we take the horse and we add noise to it. That's the Xr thing.
+Step 3 we do “decoding conditioned on the text query” using the mask 
+to replace the background with pixel values. 
+During the inference time as we do diffusion from this fuzzy horse,  
+we do a step of diffusion inference, and then all these black pixels, 
+we replace with the noise version of the original. 
+We do that multiple times, then the original pixels in the black area won't get changed. 
+And in the ouput picture the background is all the same.  
+The only thing that's changed is that the horse has been turned into a zebra. 
+
+Paragraph 3.2 describes it.
+And then it gives a lot more detail, which often has little tips about things 
+they tried  and things they found.
+
+An interesting note is that this binarized mask,  (difference between the R decoding and the Q decoding),
+tends to be a bit bigger than the actual area where the horse is, 
+which we can see with these legs, for example.  
+And their point is that that's a good thing  because often you want to 
+slightly change some of the details around the object. 
+
+So we have a description of what the thing is. Lots of details there. 
+And then here's the bit that JH totally skip, called theoretical analysis, 
+stuff that people add to try to get their papers past review.  
+You have to have fancy math. 
+And so they're basically proving insight into why this component yields better  
+editing results than other approaches. 
+We don't particularly care because it makes sense, it's intuitive and we can see it works.  
+We don't need it proven so we skip over that. 
+
+They show their experiments, what data sets they did the experiments on. 
+They have metrics with names like LPIPS and CSFID. 
+You'll come across FID a lot. This is just a version of that.  
+We're basically, they're trying to  score how good their generated images. 
+We don't normally care about that either. 
+They care because they need to be able to say, you should publish our paper because it 
+has a higher number than the other people that have worked on this area.
+ 
+XXXXXXXXXXXXX
+
+Q: from Mikołaj: This technique only work on things that are relatively similar?
+Understanding this helps to know what its limitations are going to be. 
+Yes, if we can't come up with a mask for the change we want, this isn't  going to work well.
+Because those masked areas, the pixel is going to be copied. 
+So for example, if you wanted to change it from, 
+a bowl of fruits to a bowl of fruits with a bokeh background, 
+or a bowl of fruits with with a purple tinged photo of a bowl of fruit, 
+if we want the  whole color to change, that's not going to work.
+Because we're not masking off an area. 
+Mikołaj has correctly recognized  a limitation or what's this for? 
+This is for things where you can say, just change this bit and leave everything else the same. 
+
+So there's lots of experiments. 
+For some things that you care about the  experiments a lot, if it's something like  
+classification for stuff for generation, the main thing we want to look at is the actual results. 
+For the results often we have to zoom into a lot to see whether they're really good. 
+So here's the input image. They want to turn this into an English Foxhound. 
+They're comparing themselves to SDEdit, which changes the composition quite a lot 
+and their version, it only changed the dog. 
+Ditto for the semi-trailer truck.
+The authors are showing off what they're good at, what this technique is effective at doing.
+
+Then there's a short conclusion at the end, which rarely adds anything on top of what we've already read. 
+Often the appendices are interesting, so don't skip over them. 
+Often you'll find more examples of pictures, some examples that didn't work very well, stuff like that.  
+So it's often well worth looking at the appendices, often some of the most  interesting examples are there.  
+
+And that's it, our first full on paper walkthrough. 
+Not a carefully chosen paper that we've picked  specifically because you can handle it. 
+Just the most interesting  paper that came out this week.  
+It gives you a  sense of what it's really like. 
+And for those of you who are ready to try  something that's going to stretch you,  
+see if you can implement any of this paper. 
+So there are three steps. 
+The first step is the most interesting one, which is to automatically generate a mask. 
+The information that you have and the code in the Lesson 9 notebook contains everything you need to do it. 
+So maybe give it a go.  
+Maybe if you can mask out the area of a horse that does not look like a zebra. 
+And that's actually useful in itself. 
+Like that allows you to create segmentation masks automatically. 
+So that's pretty cool.  
+And then if you get that working, then  you can go and try and do step two. 
+If you get that working, you  can try and do step three.  
+And this only came out this week. 
+So I haven't really seen examples of easy to use interfaces to this.  
+So here's an example of a paper that you could be  the first person to create a call interface to it. 
+So there's some, yeah,  there's a fun little project.  

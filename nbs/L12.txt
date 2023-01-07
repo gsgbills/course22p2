@@ -1,0 +1,622 @@
+Lesson 12 2022 Jeremy Howard
+
+CLIP Interrogator. 
+Is a Hugging Face Spaces Gradio app where JH uploaded his picture and its output is a text prompt 
+for creating  a CLIP embedding from. 
+Some folks said that this is producing the CLIP prompt that would generate this image. 
+This doesn't return the CLIP prompt that would generate this photo. 
+
+Lets explain why it can't do that and what we can try and do instead. 
+Imagine that A took a photo —of himself— and wanted to send B his photo.
+To compress it, he put it through the CLIP image encoder.
+That takes a big image and turns it into an embedding, that is much smaller than the original image. 
+It's just a vector of a few floats. 
+A sends B the embedding in an email, "there's the CLIP embedding of the photo I wanted to send you". 
+B has to decode it to turn it back into a picture.... but B can't!
+
+Let f() be the clip image encoder which takes as input an image x and returns an embedding y, y = f(x).
+Does that mean that there is an inverse function (one that undoes a function) which can take y and return x?  
+No, there is no inverse function for the CLIP image encoder, not all functions can be inverted.
+In this case we started with an input 512x512x3, and turned it into a much smaller CLIP image encoding.
+So clearly we're losing something. 
+
+We could put it through a diffusion process, where an algorithm has learned to take some noise. 
+So we could start with some noise, and  we could start with an image embedding.  
+We haven't done this before, but we could do that. 
+We could train something that takes noise and an image embedding and removes a bit of the noise. 
+And we could run that a bunch of times. 
+It wouldn't give us back the original picture, but hopefully it would give us something back if it's a conditional.
+Using the conditional diffusion approach we'd get back something  that might be like our original image. 
+Diffusion is something that takes an embedding and inverts an encoder to give back 
+something that hopefully might generate that embedding. 
+
+We don't get image embeddings when we do prompts in stable diffusion, we get text embeddings. 
+But that doesn't matter, because someone (eg OpenAI), trained CLIP and has various pictures along with their captions.
+And they trained an algorithm so that each image returned an embedding for the image 
+that was similar to the embedding that the text encoder created for the caption. 
+And the stuff that didn't match, it was trained to be different.  
+That means that a text embedding, which describes this picture,  
+and the actual image embedding of this picture  should be very similar if they're CLIP embeddings. 
+That's the definition of CLIP embeddings. 
+
+The idea that we could take a text or image embedding and turn it back into an image makes no sense. 
+This is the very definition of the thing we're trying to do when we do CLIP: to invert the embedding function.
+These kinds of problems are generally referred to as “inverse problems”. 
+Stable Diffusion attempts to approximate the solution to an inverse problem. 
+
+Why does that mean that CLIP interrogator is not actually inverting the picture to give us back the text? 
+If we've got an image embedding, trying to undo that to get back to the picture and trying to undo that to get back  
+to a suitable prompt is equally infeasible. 
+Both of them require inverting an encoder, and that doesn't exist.
+The best we know how to do at the moment is to approximate that using a diffusion process. 
+
+These texts that CLIP interrogator spits back are fun and interesting, but they are not  
+captions that you can put back into Stable Diffusion and have it generate the same photo. 
+The code for CLIP interrogator is available, we can take a look at it.  
+Let's have a look at some examples: artists, mediums, movements, etc.  
+It's got all this hard coded pieces of text. 
+It mixes and matches those various things together to see which one works well. 
+And it combines it with the output of the BLIP language model,  
+which is not designed to give an accurate description of an image,  
+but it has been trained to give an OK caption for an image.
+But it is not the inverse of the clip encoder. 
+
+
+MATRIX MULTIPLICATION
+Earlier we had done matrix multiplication with broadcasting,  
+where we had broadcast the entire column from the right hand matrix all at once. 
+That allowed us to only have one loop written in Python. 
+We do not want to loop through many things in Python, because that's slow.
+The two inner loops originally had looping through 10, and then to 784 respectively,
+have been replaced with a single line of code.  
+And it is improved by 5,000 times faster than we started out. 
+
+Einstein summation
+Einstein summation is a compact representation for products and sums. 
+We're going to replicate our matrix product with an Einstein summation.  
+The entire thing can be "pushed down" to just: `'ik,kj->ikj'`
+The arrow separates the left hand side (inputs) from the right hand side (outputs)
+The comma is between each input, i.e., there are two inputs. 
+The letters are just names that we give to the number of rows and the number of columns. 
+The first matrix we're multiplying by has i rows and k columns, the second has k rows and j columns. 
+It will create a new rank-3 tensor that has i faces, k rows, and j columns. 
+The number of letters in the output is the rank. 
+Repeated letters between input arrays, e.g., ik and kj, mean that values along those axes will be multiplied together.  
+Each item in each row will be multiplied by each item down each column to create the i by k by j output tensor. 
+m1 is 5 by 784, m2 is 784 by 10, so i=5, k=784 and j=10. 
+With torch.einsum we end up with a i by k by j: 5 by 784 by 10. 
+
+We run it on m1 and m2, and the shape of the result is 5 by 784 by 10. 
+It contains the original 5 rows of m1, the original 10 columns of m2, and for the 784 dimension,
+they're all multiplied together, because it's been copied between the two arguments to the einsum. 
+If we sum up that over this dimension, we get back the same as the original matrix multiply.
+Because what einsum has done is taken each of these  columns by rows, 
+multiplied them together to  get this 5 by 784 by 10, and then added up  
+that 784 for each one, which is exactly  what matrix multiplication does. 
+ 
+The second rule says that if we omit a letter from the output, those values will be summed. 
+So if we remove the k from the output, which gives us `"ik,kj->ij", that sum happens automatically. 
+Einstein summation notation takes some practice to get used to, but it's very convenient. 
+It is a good way of thinking about what's going on, and can simplify code.  
+And it doesn't have to be a sum, if we don't omit any letters when just doing products. 
+
+Lets define matmul using torch.einsum, check it with test_close that the original result is equal to this new matmul. 
+The speed 15 milliseconds for the whole thing compared to 600 ms, faster than the very fast broadcasting approach.
+
+PyTorch already knows how to do matmul. 
+There are two ways we can run  matmul directly in PyTorch. 
+x_train @ weights is the same as torch.matmul(x_train, weights). 
+The speed is about the same as the einsum. 
+
+GPU
+Let's go faster by using an Nvidia GPU which does lots of things in parallel. 
+We tell the GPU  what are all the things we want to do in parallel, one at a time.  
+We're going  to write in pure Python something that works like a GPU, 
+except it won't be in parallel, so it won't be fast at all. 
+First we have to define a function that can calculate just one thing, 
+even if many other things are happening at the same time, it won't interact with anything else.  
+
+An easy way to think about matrix multiplication in this way,  
+is to define something which only fills in a single item  of the result, e.g., row zero, column zero.
+Lets define a new matmul where we pass in the coordinates of the place that we want to fill in.
+Lets start by passing it (0, 0). 
+We pass it the matrices we want to multiply, and a tensor pre-filled with zeros to put the result into. 
+The result is torch.zeros, rows by columns, call matmul for location (0, 0),  
+passing in those two matrices and the results (zeros matrix).  
+We call it and get the answer in cell (0, 0).  
+
+In the the implementation we've been passed the (0, 0) coordinates. 
+So let's destructure them into i and j, the row and the column. 
+We make sure that i and j are inside the bounds of our output matrix. 
+And we start at zero and loop through all of the columns of a and all of the rows of b for i and j, 
+just like the very innermost loop of our very first Python attempt.
+And then at the end, return that into the output. 
+So it fills in one piece of the grid successfully. 
+We can call this rows by columns times, each time passing in a different grid. 
+This can be done in parallel because none of those different locations interact with any other location. 
+Something which can calculate a little piece of an output on a GPU is called a kernel. 
+So we'd call this a kernel.  
+
+Now we define `launch_kernel`, and pass it the kernel, the function.  
+So here's an example, launch_kernel  passing in the function. 
+And how many rows and how many  columns are there in the output grid. 
+And then give me any arguments that you need to calculate it.  
+In Python, *args just says any additional arguments that you pass  
+are going to be put into an array called args. 
+ 
+We're going to call launch_kernel matmul using all the rows of a, all the  columns of b, and then the args,
+which are going to be the *args, are going to be m1, the first matrix, m2, the second matrix, 
+and res, another torch.zeros we just created. 
+launch_kernel is going to loop through the rows of a, and for each row of a, 
+it'll loop through the columns of b  and call the kernel, which is matmul, 
+on that  grid location passing in m1, m2, and res. 
+So *args here is going to unpack that and  pass them as three separate arguments. 
+If we run that it fills in the exact same matrix, not fast as it's not doing anything in parallel.
+
+To do it in parallel, we use CUDA the platform and API for Nvidia GPUs. 
+To program in CUDA from Python the easiest way is with the Numba compiler, which can produce CUDA code. 
+Instead of `@njit` we write `@cuda.jit`, and it behaves a little bit differently.
+Lets compare this `matmul` to our earlier Python one. 
+Our Python matmul and the `@cuda.jit` matmul are similar. 
+But instead of passing in the grid, we call `cuda.grid`, saying how many dimensions does the grid has. 
+Numba does the unpack and passing it so we don't have to pass over the grid.
+So it doesn't need the `grid`.  
+The decorator indicates to compile that function into CUDA code. 
+We create our output tensor just like before, and use `cuda.to_device` 
+to copy the input and output tensors (3 total) to the GPU.
+We use `map`, a function cuda.to_device to each of these arguments.
+
+We create our 50,000 by 10 output of zeros, and now we're going to try and fill it in. 
+In CUDA there is a concept of blocks, and TPB which is threads per block. 
+We don't need worry about it now, just copy this. 
+It's going to call each grid item in parallel with a number of different processes.
+This is just the code which turns the grid into blocks. 
+We just always run it. 
+
+To call matmul, when matmul has @cuda.jit, we need to put in square brackets afterwards how many blocks per grid,
+(the result from the previous cell) and how many threads per block  in each of the two dimensions. 
+Just copy and paste this, and pass in the 3 arguments to the function: a, b, and c. 
+This will launch the kernel matmul on the GPU, and rg is going to get filled in. 
+But it is on the GPU, so we need to copy it back to the CPU, (the host), `copy to host`, to run that. 
+
+And test_close shows us that our result is similar to our original result. 
+Nearly all the  GPU stuff we look at only works on NVIDIA GPUs. 
+Mac GPUs are starting to get a little  bit of support from machine learning libraries.
+In a GPU is about 4 milliseconds, the PyTorch matmul on CPU was 15 milliseconds. 
+We can go faster using the same code we had from the PyTorch up. 
+But we take the tensor and write .cuda() after it so it copies it over to the GPU.
+If it's on a NVIDIA GPU, we do the same for weights.cuda().
+And then copy back to the host with .cpu()
+These are our two CUDA versions. 
+Now the whole thing will run on the GPU. 
+
+Compared to our broadcast version, we are another thousand times faster. 
+This version compared to our original version is 5 million times faster. 
+That's why we need to run stuff on the GPU. 
+
+JH was running CUDA on a Mac using SSH tunneling to remotely access a Jupyter Notebook running anywhere.
+The live coding from Part-1 might have covered that already.  
+ 
+APL borrows from Einstein notation via tensor analysis.
+The general idea of removing  the index is very important in APL,
+and it's become very important in NumPy,  PyTorch, TensorFlow, etc. 
+
+We now know how to multiply matrices, let's practice that in the 02_meanshift notebook. 
+We're going to exercise our tensor manipulation in this section.
+And the key actually endpoint is the homework. 
+We need to get to a point that we can implement something like this, but for a different algorithm. 
+This is like learning the times table, it comes up all the time, so if we don't know it well, 
+the rest gets difficult and slower .
+It is frustrating to spend time thinking about the mechanical operations rather than getting work done. 
+When we have  an idea, it is key to quickly translate it into working code.
+That code is written for GPUs and fast CPUs using broadcasting, Einstein notation,  matrix modifications, etc.
+As it is important, lets practice it by developing a clustering algorithm, mean shift clustering,
+a useful algorithm that few come across.
+
+Cluster analysis is different to anything that we've worked on in this course so far.
+There isn't a  dependent variable that we're trying to match. 
+Instead we're trying to find "clusters", groups of similar things in the data.
+There are many different areas with applications of cluster analysis. 
+Sometimes cluster analysis can be overused or misused. 
+It's best for when the various columns are the same kind of thing and have the same kind of scale. 
+For example, pixels are all the same kind of thing.  
+But for market research with socio-demographic inputs may not be as good because they're different kinds of things. 
+An OK example is data from surveys, e.g., with from one to five answers.
+
+We create some some synthetic data which we know how we want it to behave.  
+Lets create six clusters, each is going to have 250 data samples in it. 
+First we randomly create six centroids, the "middle" of where the clusters are. 
+We need them n_clusters by 2 because we need an X and a Y coordinate for each one. 
+We randomly generate data around those six centroids, using `sample` on each of them. 
+In the figure, the Xs are the centroids and the colored dots is the data. 
+
+Given this data without the Xs, the problem is figuring out where the Xs would have been. 
+The goal is to find out that there are a few distinctly different types of data in the given dataset. 
+For images this can discover that there are some that are very different to all the other ones,
+e.g., taken at nighttime, or of a different object. 
+
+NORMAL
+So how does sample work? 
+Well we're passing in the centroid, each contains 2 values, an X and a Y. 
+MultivariateNormal() is just like normal, will give back normally distributed data, 
+but more than one item (multivariate).
+We pass a mean for X and a mean for Y, and that's the mean that the data will have.
+And the standard deviation is going to be five. 
+We use `torch.diag(tensor([5.,  5.]))` because for multivariate normal distributions,
+there is one standard deviation for each column that you get back. 
+There could also be a connection between columns, so columns might not be independent. 
+We need a *covariance matrix*, not just a variance. 
+We discuss that a little in Lesson 9b... 
+
+`sample` is going to give us random columns of data with this mean and this standard deviation, 
+and this many samples. 
+PyTorch has different distributions that we can use.  
+For the clustering problem, we don't know the different colors, nor where the Xs are. 
+Its our job to figure that out. 
+
+PLOT
+We want to plot the Xs and we want to plot the data, so it looks like below.
+For each centroid we grab its samples, from `i * n_samples`  up to `(i +1) * n_samples`. 
+Then we create a scatterplot with the samples on them.  
+We've created an axis here, we'll see why later that we can also pass one in.
+But we are not passing one in. 
+So we create a plot and an axis.  
+In Matplotlib we can keep  plotting things on the same axis. 
+We plot on the centroid a big black X and then a smaller magenta x. 
+
+Mean Shift
+how do we create something that starts with all the dots and returns where the Xs are?  
+We're going to use a particular clustering algorithm called Mean Shift. 
+Mean Shift is a good clustering approach, because we don't have to say how many clusters there are,
+which often is unknown.   
+Other algorithms, eg k-means require us to say how many. 
+Instead, we pass a bandwidth which can be chosen automatically.
+It can also handle clusters of any shape, they don't have to be ball-shaped.
+
+We're going to pick a point, and find the distance between that point and every other point in a big list. 
+Now we take a weighted average of all of those points. 
+Without the weighting, it is just the average of all of the points and how far away they are.
+The key is to find an average that is weighted by how far away things are.
+A point that is a very long way away from our point of interest should have a very low weight in the weighted average.
+Conversely, a point which is very close, should have a very high weight in our weighted average. 
+
+We create weights for every point compared to the one that we're  currently interested in using.
+That is called a Gaussian kernel.
+Points that are further away from our point of interest are going to have lower weights, they're penalized.  
+The rate at which weights fall to zero is determined by the bandwidth, which is the standard deviation of our Gaussian. 
+So we take a weighted average of all the points in the data set, weighted by how far away they are. 
+It's mainly going to be a weighted average of the points that are nearby. 
+And the weighted average of those points, is going to be somewhere around here. 
+The update is going to move all of these points in closer, like a gravitational center.
+ 
+The Gaussian kernel, aka the normal distribution. 
+Lets define a function can quickly plot any function (does not come with Matplotlib). 
+For the horizontal axis, let's use all 100 numbers from 0 to 10 spaced evenly, using `linspace()`
+`plot_func` plots those xs and y=f(x).
+The function gives a point close (far) to the point of interest a high (low) weight,
+i.e., it penalizes further away points. 
+We plot `gaussian` for a bandwidth of 2.5, using functools `partial`. 
+
+JHNB: To find out where something, eg partial, comes from, type it and press shift enter, 
+and it provides where it comes from. 
+A "?" gets the help, and "?? gets the source code.
+
+With partial we define a new partially applied function, e.g., gaussian, with the argument `bw=2.5`. 
+We can assign that to a function f, type f(4), nd we can see that's exactly what this is, about 0.44. 
+Partial function application is a useful and important tool. 
+Without it plotting this function would have been more complicated. 
+An alternative would be to create a little function in line using `lambda` x, which is Gaussian of x with a bandwidth of 2.5. 
+
+We decide to make the bandwidth 2.5, using a rule of thumb: choose a  bandwidth which covers about a third of the data. 
+A third of the data should be enough to cover two clusters.
+We can play with bandwidths and get different amounts of clusters. 
+
+Often when we see something that is on the complicated side, like a Gaussian, 
+we can often simplify things. 
+I think most of the implementations and writeups I've seen talk about using Gaussians,  
+The shape of it looks a lot like a triangular weighting, which is just a linear with clamp_min(). 
+We could probably use this, so we define triangular weighting and then we can try both. 
+
+We start with the Gaussian version, and move all the  points towards their "center of gravity". 
+We don't want to mess up our original data, so we clone it with `torch.clone()`.  
+X is the matrix of data. (common to use capital letters for matrices.),
+a rank-2 tensor of 1,500 data points by 2, the x and y. 
+x will be our first point, a rank-1 tensor of shape 2.
+
+If we got two shapes of different lengths, we can use the shorter length and 
+it's going to add unit axes to the  front to make it as long as necessary. 
+We just use little `x` and it works the dimension is compatible, right to left, the last axes match.
+The second last axis, it doesn't exist, it automatically pretends that there is a unit axis.
+
+BREAK  
+We got the distance between our first point x and all of the other points in the dataset X. 
+Lets look at the  first eight of them here. 
+The first distance is 0 in both axes because it is the first point. 
+Given the way we generated the clusters, the data of the 1st cluster is all next to each other in the list. 
+None are too far away from each other. 
+Now that we've got all the X and Y distances, it's easy to get the Euclidean distance:
+square that difference, sum, and square root. 
+
+NORMS. 
+We've got data points, and there is distance across the X and Y axes, 
+which we can use Pythagoras: a² + b² = c²  to calculate.
+Here it would be the square root of the change in X squared plus the change in Y squared.
+Rather than "square root" we say "to the power of a half".
+There's a different way we could find "distance", ie,  first go along here and then go up here. 
+That "distance" would be the absolute value of the change in X, 
+to the power of one plus absolute value of the change in Y to the power of 1. 
+In general, if we've got a whole list of numbers,V, we can add them up,
+we can do each one to the power of some number alpha,
+take that sum to the power of 1/alpha, and this thing is called a norm. 
+The 2norm we can write in different ways, e.g., ||v||2, for alpha equals two. aka the Euclidean distance.
+The changes in X and Y are the  absolute value of that distances. 
+
+The Root Mean Squared  Error is the two norm (L2) and the Mean Absolute Error is the one norm (L1). 
+Norms comes up all the time because we're often interested in  distances and errors. 
+We're only going to use L1 and L2 in this course. 
+ 
+So this has got eight things in it, because we've summed it over dimension one. 
+Homework: rewrite using torch.einsum(). 
+
+Now we can get the weights by passing those distances into our Gaussian. 
+As we would expect, the  biggest weights, it gets up to 0.16. 
+So the closest one is itself, it's going to be at a big weight.  
+These other ones get reasonable weights and  the ones that are in totally different clusters  
+have weights small enough that at three  significant figures they appear to be zero. 
+
+The weights are 1,500 long vector and the original data is 1500 by 2, the X and the Y for each one. 
+So we now want a weighted average. 
+We want this data, we want its average weighted by this. 
+A simple average is the sum of your data items divided by the count. 
+In a weighted average, each item is going to have a different weight, so we multiply each one by the weights. 
+And rather than dividing by n  divide by the sum of weights.
+We can't say weight * X, because they are not compatible: going right to left, we have 2 and 1500. 
+The size of a tensor dimension must "match", eg equal or one of them can be 1. 
+If it was 1500,  1 then they would match. 
+To add the trailing unit axis, we  say every row and a trailing unit axis. 
+So we can now multiply that by X. 
+
+And as you can see, it's  now weighting each of them, and the x’s and y’s at bottom are all zero.
+So we can sum that up and then  divide by the sum of weights.  
+Let's write a function  that puts all this together. 
+Now is not just grabbing the  first x, we enumerate through all of them.
+The distance and weights as before, the product we had before, 
+then sum across the rows, divide by the sum of the weights. 
+So that's going to calculate for the ith, it's going to move. 
+So it's changing the ith thing in capital  X so that it's now 
+the weighted average of all of the other data, weighted by how far it is away. 
+So that's going to do a single step. 
+
+The `meanshift` update is: clone the data, iterate a few times, and do the update. 
+Now we plot, with the centroids "moved" by two units so we can see the dots where our data is. 
+They are dots now because every single data point is on top of each other on a cluster. 
+They are now in the correct spots, it has successfully clustered our data. 
+
+Now we can test our hypothesis: Could we use triangular just as well as the Gaussian? 
+(So control slash comments and uncomments.)
+Yes, we got exactly the same results.
+
+JHNB: Keyboard shortcuts: hit H to get a list of them. 
+Some things that are important don't have keyboard shortcuts.  
+We can click help, edit keyboard shortcuts, there's a list of all the things Jupyter can do. 
+And we can add keyboard shortcuts to things that don't have them.  
+JH always adds keyboard shortcuts to run all cells above (Q A) and run all cells below (Q B). 
+ 
+Now we just saw the result of the 5 steps. 
+What did it look like one step at a time?
+It's important to see things happening one step at a time, 
+because there are many algorithms which update weights or data. 
+For Stable Diffusion, for example, we're very likely to want to show the incrementally denoising.
+Hence it is important to know how to do animations.  
+The documentation for this is unnecessarily complicated because a lot of it is about how to make them performant. 
+Most of the time we probably don't care too much about that. 
+
+Lets use a simple way to create animations, using Matplotlib.animation FuncAnimation. 
+To create an animation we define a function. 
+We're going to call `FuncAnimation`, passing in the name of that function and saying how many times (`frames`) to run it. 
+And then create an animation that basically  contains the result of that with a 500  millisecond interval between each one. 
+To create one  frame of animation, we will call `one_update()` to update our Xs. 
+And then we're going to have an  axis, which we've created here. 
+So we're going to clear whatever was on the plot before and plot our new data on that axis. 
+And then, the very first time it calls it, we want to plot it before running. 
+And is going to be passed  automatically the frame number.  
+So for the zeroth frame, we're not going to do the update, just plot the data as it is already. 
+
+So we clone the data, create our figure in our subplots,  call FuncAnimation() calling do_one 5 times. 
+And then we're going to display the animation.  
+`HTML` takes some HTML and displays it, `to_jshtml()` creates some HTML. 
+That's why it's created this HTML includes JavaScript. 
+And so we'll click run  one, two, three, four, five. There's the five steps.  
+So if I click loop, you'll see  them running again and again. 
+An easy way to create a Matplotlib animation. 
+Hopefully we can use it to play around  with some fun Stable Diffusion animations as well. 
+In addition to `to_jshtml()` we can also create movies, we can call `to_html5_video()` 
+and save an animation as a movie file. 
+
+Homework: create K-means or other algorithm with animation, 
+or create an animation of some Stable Diffusion thing that you're playing with. 
+So don't forget this important ax.clear().  
+Without the ax.clear() it prints it on top of the last one, which sometimes is what you want, 
+to  be fair, but in this case, it's not what we wanted. 
+
+GPU acceleration
+
+It is slow, half a second for not that much data in CPU.
+But it has a Python loop going over the number of samples, e.g. 1500. 
+If we just move the "core" to the GPU, calling that from Python,   
+there would be a huge communication overhead of control and data switching between the CPU and the GPU. 
+It's the kernel launching overhead. 
+We don't want to have a big Python loop that calls CUDA (GPU) code. 
+We need to make all of this run without the loop, which we can do with broadcasting. 
+Lets try to get a broadcasting (no loop) version of this working.
+
+The way to do broadcasting on a GPU is to create batches.
+To create a batch we define a batch size, e.g. `bs=5`, to do five at a time. 
+But the code is only doing one at a time, how do we do get five at a time?  
+First let's clone the data, and this time use little x for our testing.  
+We do everything step by step, with little tests. 
+This is not X[0] anymore but it's X[:bs], e.g., the first five points. 
+Little x is now a 5x2 matrix, our minibatch, the first five items. 
+The full dataser as before is 1,500x2. 
+We need a distance calculation, but  previously our distance calculation worked 
+if little x was a single number and it returned just the distances from  that to everything in big X
+
+But we need to return a matrix, but we've got 5x2 in little `x` and 1500x2 in `X`.
+What is the distance between these two? 
+There's going to be a distance between each pair of items `[x[i],x[j]]`.
+So the output is a matrix of distances. 
+For example, for each of the 5 points in the minibatch, there will be 1,500 distances.
+So we need broadcasting to do this calculation. 
+So we define a function that will output a 5x1500 tensor.
+ 
+So can we do X – x? No, we can't, because big  X is 1,500 by 2 and little x is 5 by 2. 
+So it's going to look right to left. Are these compatible? Yes, they are. They're the same. 
+These compatible?  No, they're not, because they're different, so that's not possible to do. 
+We need to insert extra None axes so that they are compatible for broadcasting.
+Now we can subtract them directly, because broadcasting will make effective "copies" to match.
+We subtract and get what we  wanted, which is a 5 by 1,500. 
+And there's also by 2 because there's both the X and the Y. 
+ 
+It's taking this attraction, it's squaring them  and then summing over that last shortest axis,  
+summing over the X and the Y squareds. And then take square root.  
+  
+Most things that you can do on tensors, we  can either write torch. as a function, or we can write it as a method. 
+Generally speaking, not everything, but most things work in both spots.  
+
+Now we've got this  matrix, which is 5 by 1,500. 
+The Gaussian kernel doesn't have to be changed to get the weights.
+And the reason for that is this is a scalar, so it broadcasts over anything.  
+And then this is also just a scalar, so this is all going to work fine.
+
+Now we've got a 5x1500 weight, the weight for each of the 5 points of our mini batch, 
+for each of the 1,500 things. 
+And the shape of the data, `X.shape`, which is the 1,500 points. 
+We want to apply each one of these weights to each of these columns. 
+We need to add a unit axis to the end, we could say [:, :, None], 
+but dot dot dot  (` [...]` ) means all of the axes up until however many you need. 
+So in this case, the last one comma none ( `[…, None]` ). 
+This is going to add an axis to the end. 
+ 
+So this is going to turn weight.shape from 5x1500 to 5x1500x1, and this adds an axis to the start, the same as X[None, :, :]  
+These are broadcast compatible, so it's going to copy each weight across to each of the X and Y, which is what we want. 
+We want to weight every one of the 5 points in our mini batch, a separate set of  weights for each of them. 
+That is how to think through these calculations. 
+
+We do that multiplication, which returns a 5x1500x2 tensor, as we end up with the maximum dimension for each axis. 
+Then we sum up over the 1,500 points and that returns 5 new data points. 
+
+Here we've got a product and a sum, which tells us that maybe we should use einsum. 
+We've got our weight 5x1500, and X is 1500x2.
+Let's use i and j as indices the 5 and 1500, we want to take the product, so we use the same name 'j',
+and k is the number of rows.
+We want to end up with an i by k tensor. 
+`torch.einsum()` gives the same result.
+It is the same einsum we had just before when we were doing matrix multiplication. 
+We've recreated matrix multiplication using this trick, so we can just use `@`.  
+
+We don't like this messing around with axes and summing over dimensions.  
+It's much clearer to get things down to einsum or better to matrix multipliers,
+we all recognize them as we use them all the time.
+Performance would be pretty similar.
+
+Now we've got to do our sum: we've got our 5 points. This is our 5 denominators. 
+So we've got our numerator that we  calculated up here for our weighted average. 
+The denominator is just the  sum of the weights, remember.  
+And so numerator divided by  denominator is our answer. 
+
+We've gone through every step, checked out all the  dimensions all along the way. 
+Don't try and write a function like this just bang from scratch.
+Instead do it step by step. 
+So here's our mean shift algorithm:
+Clone the data, go through five iterations, go from 0 to n, batch size at a time. 
+
+We can create a Python `slice` of X starting at 1 up to `i + bs`.
+Unless we've gone past n, which goes use n. 
+The final step is to create the new `X[s]`, where `s` is a slice of data points. 
+A slice is what Python does when we use colon. 
+Very convenient when we need to use the same slice multiple times. 
+
+CUDA. 
+Lets move it on to the GPU, run `meanshift()`, it takes 1 millisecond. 
+Previously without GPU, it took 400 milliseconds. 
+We should look at other batch sizes, because now we're looping over batches. 
+We can even do all 5,000 at once.  
+We can GPU optimize a meanshift. 
+People write papers about such implementations.
+It's great that we can do with PyTorch a challenging academic problem to solve. 
+
+Can we do something similar with other algorithms. 
+Part of the homework is to go read about them and learn about them. 
+DBSCAN JH accidentally invented and then discovered a year later had already been invented.
+DBSCAN is a cool algorithm and has a lot of similarities to MeanShift. 
+LSH comes up all the time, and LSH could be used to speed this whole thing up a lot.  
+Because when we did that distance calculation, the vast majority of the weights are nearly zero. 
+And so it seems pointless to create a big matrix, that's slow. 
+It would be better if we just found the ones that were like pretty close by and just took their average. 
+We want an optimized nearest neighbors. 
+This is an example of a fast nearest neighbors algorithm. 
+And there are things like k-d trees and octrees, etc.
+
+TODO: invent a new mean shift algorithm, which picks  only the closest points to avoid quadratic time. 
+
+Calculus
+3Blue1Brown youtube series "the essence of calculus", JH claims is "a pleasure to watch". 
+We don't need to know much calculus at all: Just derivatives. 
+Consider a car, and lets see how far away from home it is at various time points.
+After a second it's traveled 5 meters, after 2 seconds, it traveled 10 meters, 3seconds 15 meters.
+Location is how far have you traveled  at a particular point in time? 
+We can look at one of these points and find out how far that car has gone. 
+We can also take two points and ask where did it start at the start of those two points
+and where did it finish at  the end of those two points. 
+And we can say between those  two points, how much time passed and how far did they travel.
+In 2 seconds they traveled 10 meters. 
+The slope of something is rise over run. 
+10 meters in 2 seconds. Notice we don't just divide the numbers, we also divide the units. 
+We get 5 meters per second. 
+We changed the dimensions, now not looking at distance, but at speed or velocity. 
+And it's equal to rise over run is equal to the rate of change. 
+As time, the X axis, goes up by 1 second, what happens to the distance in meters? 
+As one second passes, how do the number of meters change? 
+Maybe these aren't points at all. 
+Maybe there's a function, a continuum of points.  
+The function is a function of time, eg distance is a function of time. 
+And we ask what is the slope of that function?
+And we can get the slope from point A to point B using rise over run. 
+
+So from t1 to t2, the amount of time that's passed is t2 minus t1. 
+And the distance that they've traveled, they've moved from wherever they are at the end to wherever they were at the start. 
+So that's the change in distance  divided by the change in time.  
+Let's say that's Y. 
+In calculus we talk about finding a slope of complicated functions.  
+What is velocity at an exact moment in time? At an exact moment in time it's frozen.   
+But what's the change in time between a bit before our point and a bit after our point? 
+And what's the change in distance between a bit before our  point and a bit after our point? 
+We can do the same kind of rise over run thing.
+We can make that distance between t2 and t1 smaller and smaller and smaller. 
+
+Let's rewrite this in a slightly different way. 
+Let's call the denominator the distance between t1 plus a little bit, we'll call  it d. 
+It's that minus t1. 
+t2 is t1 plus a little bit. 
+So now f(t2) becomes f(t1 plus a little bit).
+Notice that t1 plus d minus t1, just comes out to d. 
+So this is another way of calculating  the slope of our function.  
+And as d gets smaller we're getting a triangle that's tinier. 
+It still makes sense some time has passed and the car has moved.
+But it's just smaller and smaller amounts of time. 
+
+If you know calculus you might've done all this stuff with limits and epsilon, delta.... 
+We can just think of d as a really small number, where d is the difference. 
+And so when we calculate the slope, we can write it in a slightly different way,
+as the change in Y divided by the change in X. 
+This here is the change in Y and  this here is the change in X. 
+This here is a very small number, and this is the result in the function  of changing by that very small number. 
+This way of thinking about calculus is known as the calculus of infinitesimals, Leibniz originally developed it.  
+When we do calculus, we act like dX is a really small number.
+At school, JH was told he wasn't allowed to do that, but since learned that it's fine.
+Next lesson we're going to look at the chain rule.
+Recommends to watch the 3Blue1Brown course before lesson 13.
+No need for integration, nor doing derivatives by hand. 
+There are rules such as dY/dX if Y equals X squared is 2X. 
+PyTorch is going to do them all for you. 
+We care about the chain rule... next time.  

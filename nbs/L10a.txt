@@ -1,5 +1,6 @@
-lesson 10 of “Practical Deep Learning for Coders”.  
-Second lesson in Part 2, which is where  we're going from “Deep Learning Foundations to Stable Diffusion”. 
+Lesson 10 of “Practical Deep Learning for Coders”.  
+
+Second lesson in Part 2, which is where we're going from “Deep Learning Foundations to Stable Diffusion”. 
 Let's take a look at some interesting work that students in the course have done over the last week. 
 Check out the “Share your work here” thread on the forum.
 @puru did a spherical linear interpolation between two different latent noise starting points 
@@ -182,7 +183,6 @@ Jhono says that it took about eight minutes to do it for Imagen  on TPU.
 Although Imagen's quite a slow, big model although the TPUs they used were the latest TPUs. 
 So might be an hour or  something for a Stable Diffusion on GPUs.  
 
-XXXXXXXXXXXXXXXXX
 
 Back to the diffusion-nbs repo, stable_diffusion notebook,from Hugging Face folks, (Whatis_SD)
 Lets dig into the pipeline to pull it apart step by step, so we see what happens. 
@@ -232,8 +232,7 @@ Everything is pre-trained, all done for us, we're just doing inference.
 
 For the classifier free guidance, we also need the embeddings for the empty string, so we do the same thing.  
 We concatenate those two together, to get the  GPU to do both at the same time.
-
-And so now we create our noise.   
+So now we create our noise.   
 And because we're doing it with a VAE, we can call it latents, but it's just noise, really.  
 I wonder if you'd still call it "latents" without the VAE...  
 So that's just random numbers, normally generated, normally distributed random numbers of size one  
@@ -288,7 +287,6 @@ And then finally convert it up to between 0 and 255 as an INT,
 which is actually what PIL really wants and there's our picture. 
 So there's all the steps.
 
-XXXXXXXXXXXXXXXXX
 The way JH builds code is using notebooks, step by step.
 And then copy the cells use "Shift M" which takes two cells and combines them. 
 And removed the prose, so we can see the entire thing on one screen. 

@@ -1,4 +1,6 @@
-L10 Part 2
+L10 Part 2: From the Foundations up
+See also https://mlops.systems/computervision/fastai/parttwo/2022/10/24/foundations-mnist-basics.html
+
 This is going to require tenacity and patience, but we are going to learn a lot. 
 We're working now through the course22p2 repo.  
 The notebooks are ordered, we start with notebook number one.  
@@ -8,15 +10,13 @@ the Python standard library, all the stuff that comes with Python by default.
 We're allowed to use Matplotlib as a plotting library, and Jupyter notebooks.
 We use nbdev to create modules from notebooks.
 We're going to rebuild everything starting from this foundation. 
-We are allowed to use are other libraries once we have re-implemented them correctly.
-If we re-implement something from NumPy or from Pytorch, 
-we're then allowed to use the NumPy or Pytorch version.  
-When we create new things they become part of our own library, “miniai”,  
-we're going to build a little framework as we go. 
+We are allowed to use other libraries once we have re-implemented them correctly.
+If we re-implement something from NumPy or from Pytorch, we're allowed to use the NumPy or Pytorch version.  
+When we create new things they become part of our own library, “miniai”, a little framework as we go. 
 
 The Imports all come from the Python standard library except for two from matplotlib. 
 The models used in Stable Diffusion were trained on millions of dollars worth of equipment for months.
-As we don't have that time or money, we're going to create smaller —identical but smaller— versions of them. 
+As we don't have that time or money, we're going to create smaller versions of them. 
 Once we've got them working, we'll then be allowed to use the big pre-trained versions. 
 We will get own VAE, U-Net, CLIP encoder, etc. 
 
@@ -37,7 +37,7 @@ We can hit tab inside and it'll list  all the things we could type.
 
 To grab the URL Python has the urllib library `urlretrieve`. 
 TODO: read the Python documentation, for every single method we use.   
-So if I  click on that, here is the documentation for urlretrieve. 
+So if we click we get the documentation for urlretrieve. 
 We can find what it can take and learn about what it does.
 We look at every single option that it takes and then practice with it inside Jupyter. 
 
@@ -51,77 +51,66 @@ shift enter and it's going to give me the documentation.
 With a second question mark (“??”)  it gives me the full source code. 
 Reading the source code of the Python standard library is often quite revealing, a great way to learn more about it.
 
-So in this case I'm just going to use a very  simple functionality, 
-which is I'm going to the URL to retrieve and the file name to  save it as. 
-And again, I made it so I can run  this multiple times so it's only going to do the  urlretrieve if the path doesn't exist. 
-If I've  already downloaded it I don't want to download  it again. 
-So I run that cell and notice that I can put exclamation mark (“!”) 
-followed by line of Bash and it actually runs this using Bash.  
-(If you're using Windows this won't work  and I would very, very strongly suggest  
-if you're using Windows use WSL and if you use  WSL all of these notebooks will work perfectly.)
+Lets use a simple functionality going to the URL to retrieve and the file name to save it as. 
+Again, made it so we can run it multiple times, i.e., it's only going to do the urlretrieve if the path doesn't exist. 
+If we have already downloaded it I don't want to download it again. 
+We can put exclamation mark (“!”) followed by line of Bash and it runs this using Bash.  
+(If you're using Windows this won't work, use WSL and then all these notebooks will work.)
 
 This is a gzip file, Python has a gzip module so we can open a gzip file using `gzip.open()` 
 and we can pass in the path, then say we're going to  read it as binary —as opposed to text—.  
-A Context Manager “with” clause and what it's going to  
-do is it's going to open up this gzip file, the  gzip object will be called “f” and then it runs  
-everything inside the block and when it's done it  will close the file automatically. 
+A Context Manager “with” clause and it's going to open up the gzip file, 
+the  gzip object will be called “f” and then it runs  everything inside the block,
+and when it's done it  will close the file automatically. 
 A “with” block can do different things.
 
 The gzip file contains a pickle object, a Python object that have been saved to disk. 
 It's the main way in pure Python to save stuff and it's part of the standard library. 
 So this is how we load in from that file. 
 The MNIST file contains a couple of tuples.
-When we put a  tuple on the left hand side of an equal sign it allows us to "destructure" it.
+When we put a tuple on the left hand side of an equal sign it allows us to "destructure" it, 
+a way to make code clear and concise.
 It puts the first tuple  into two variables called x_train and y_train,
 and the second tuple into x_valid and y_valid. 
 
-This is called “destructuring” and it's a way to make code clear and concise.
-Lets have a look at the data. 
-We are not allowed to use NumPy —according to our rules— 
-but unfortunately this actually comes as NumPy, so we turned it into a list. 
+Lets look at the data. 
+We are not allowed to use NumPy —according to our rules—,  but unfortunately this comes as NumPy, we turn it into a list. 
 We take the first image and turned it into a list so we can look at a few examples of some values in that list.   
 Looks like they're numbers between 0 and 1. 
-
 To learn about a new data set, grab a little bit of it and look at it, and get a sense of what it is. 
-Now, interestingly, this image is a 784 long list, because they are 28 by 28 images.  
-How do we turn this 784 long list into 28 by 28? 
-So I want a list of 28 lists of 28, because we don't have matrices.  
+The image is a 784 long list because they are 28 by 28 images.  
+We need to turn this 784 long list into a list of 28 lists of 28, (because we don't have matrices.) 
   
 Lets define a function `chunks`.
 `vals` is currently a list of 10 things.  
-Now if I take “vals” and I pass it to chunks() with 5 it creates two lists of five. 
-Here's list number one of five elements,  and here's list number two of five elements.  
-It's  chunkifying this list and this is the length of each chunk. 
+If we take “vals” and pass it to chunks() with 5 it creates two lists of five. 
+It's chunkifying this list and this is the length of each chunk. 
 
-Now, how did it do that? The way  I did it is using a very useful thing (and little known) 
-in Python which is “yield”. 
+We did it is using a very useful thing (and little known) in Python which is “yield”. 
 And what “yield” does is,  you can see here I've got a loop, 
-it's going  to go through from zero up to the length of my list 
-and it's going to jump by five at a time.  
+it's going  to go through from zero up to the length of the list and it's going to jump by five at a time.  
 That's going to go, in this case, 0 comma 5.  
-Think of this as being  like return, for now, it's going to return the list from 0 up to 5. 
+Yield is similar to return, it's going to return the list from 0 up to 5. 
 So it returns the first  bit of the list. 
 But yield doesn't just return, it returns a bit and then it continues, and it returns a bit more.  
 yield creates an iterator, something that we can call “next” on a bunch of times. 
 
-We can say iterator  equals (val_iter =)... 
-An iterator (`val_iter`)  is something that we can “next” on. 
+We can say iterator equals (val_iter =)... 
+An iterator (`val_iter`) is something that we can “next” on. 
 And next basically says: yield the  next thing. 
 So this should yield vals[0:5]. 
-If we run that again it's going to give me a different answer because it's now 
-up to the second part of this loop, now it returns the last five. 
-If we pass an iterator to Python's list it runs through the entire  (iter_val) iterator until  
-it's finished and creates a list of the  results. 
-When finished, if you call next and get `StopIiteration`, that means you've run out,
-because there's nothing left in it.  
+If we run that again it's going to give a different answer because it's now 
+up to the second part of this loop, so it returns the last five. 
+If we pass an iterator to Python's list it runs through the entire (iter_val) iterator until  
+it's finished and creates a list of the  results.
+When finished, if we call next and get `StopIiteration`, it means there's nothing left in it.  
 
 We now have a way of taking a list and chunkifying it.  
-Now we can take the full image number one, 
-chunkify it into chunks of 28 long and turn it into a list, and plot it.
+Now we can take an image, chunkify it into chunks of 28 long, turn it into a list, and plot it.
 
-There are other ways to iterators and generators, so lets look how to do them in Python. 
-You will often find that you can throw away huge pieces of enterprise software and replace it with an iterator,  
-that lets you stream things one bit at a  time, it doesn't store it all in memory.
+There are other ways to do iterators and generators, so lets look how to do them in Python. 
+JH finds that some can throw away huge pieces of enterprise software and replace it with an iterator,  
+that lets you stream things one bit at a time, it doesn't store it all in memory.
 Python comes with a standard library “itertools” that makes it easier to work with iterators. 
 Lets see one example which is “islice”.
 So let's grab our 10 values.
@@ -129,12 +118,11 @@ We can take any list and turn it into an iterator by passing it to iter().
 We can call `next(it)`, it's giving us each item, one at a time.
 That's what converting it into an iterator does. 
 
-“islice” converts “it” into a different kind of iterator, let's call this maybe islice iterator (isit).  
+“islice” converts “it” into a different kind of iterator, let's call it `isit`.  
 We create the iterator and then call next a few times.  
 It's now only returning the first five,  before it raises `StopIteration`. 
 islice grabs the first n things from an iterable (something that  you can iterate).   
-We can pass it to list(), for example, if we pass it to list again this iterator 
-has now grabbed the first five things,  so it's now up to thing number six.
+If we pass it to list() again this iterator has grabbed the first five things, so it's now up to thing number six.
 If we call it again it's the next five things, and if we call it again, then there's nothing left.
 
 Now lets do the "chunks" with `islice`.
@@ -146,17 +134,15 @@ And `islice` will return empty list when it's done.
 
 So this here is going to  keep calling this function again and again, until it gets an empty list.  
 So if we do it with 28 then we're going to get our image again. 
-So we've now got two different  ways of creating exactly the same thing.  
+So we've now got two different ways of creating the same thing.  
 
 If you've never used iterators before, now's a good time to play with them.
-For example,  you could take this here, and if you've  not seen lambdas before they're exactly the  
-same as functions, but you can define them in  line, so let's replace that with a function.
-Okay, so now I've turned it into a function  and then you can experiment with it.  
-So let's create our iterator, then call f() on it…  
-and you can see there's the first 28. 
-And  each time I do it I'm getting another 28. 
-Now the first two rows are all empty but finally  got some values. 
-See how each time I'm getting something  else, just calling it again and again.  
+lambdas are anonymous functions defined inline.
+Let's replace the lambda with a function and experiment with it.  
+So let's create our iterator, then call f() on it…  and we can see there's the first 28. 
+And  each time we do it we get another 28. 
+The first 2 rows are all empty but then we got some values. 
+Each time we get something else, just calling it again and again.  
 And that is the value of an iterator. 
   
 When we hit something in the code that doesn't look familiar, pause and experiment with that in Jupyter. 
@@ -164,11 +150,8 @@ For example, iter(), most people have not used it, certainly not used this two a
 So hit shift tab a few times and now you've got at the bottom a description of what it is. 
 Or find out more: Python iter, go to the docs.python.org.
 Iter returns an iterator object, what's that? click on it, find out.
-This is important to know.
+Iter is important to know.
 Here's that Stop Iteration exception. 
-So the the  docs of Python are good.
-
-XXXXXXXXXXXX
 
 Now we've got an image, which is a list of lists, and each list is 28 long,  
 we can index into it, so we can say image[20], is a list of 28 numbers and then we could index into that.  
@@ -180,42 +163,34 @@ Then we need to write "dunder" methods, with names of two underscores, a special
 These Dunder methods are special methods which have particular meanings to Python,
 all documented in the Python data model (https://docs.python.org/3/reference/datamodel.html)
 
-For example, click  (__init__) and it tells you this is the thing that constructs objects.  
+For example, click (__init__) and it tells you this is the thing that constructs objects.  
 Anytime we want to create a class that we want to construct, 
 and it's going to store some stuff (e.g., the image),  we have to define (__init__).
 Python requires that in every  method we put “self” here 
-—for reasons we don't really need  to get into right now—, and then any parameters. 
-So we're going to be creating an image passing in the thing to store the “xs”,  
-we're going to be passing in the “xs”. 
-And so here we're just going to store it inside the self.  
-So once I've got this line of code, I've now  got something that knows how to store stuff,  
-the xs inside itself. 
+—for reasons we don't really need to get into right now—, and then any parameters. 
+So we're going to be creating an image passing in the thing to store the “xs”.
+And we store it inside the self.  
+Once we've got this, we got something that knows how to store the xs inside itself. 
 
 We want to be  able to call ([20,15]). 
 As part of the data model, there is `__getitem__`.  
 When we call square brackets on an object that's what Python uses. 
 And it's going to  pass across the [20,15] here, that's indices.  
-So we're now, basically, just going  to return this, so the self.xs, with the first index and the second index.   
-So let's create that Matrix class and run that and you can now see m[20,15] is the same.  
+We're just going to return this, so the self.xs, with the first index and the second index.   
+So let's create that Matrix class and run that... and `m[20,15]` is the same.  
 
-It's somewhat unusual to put  definitions of methods on the same line, as the signature.
-JH does it quite a lot for one-liners. 
-It helps to be able to see all the code on the screen at once.  
-Many programmers have had that approach, and it seems to work well for some people that are very productive. 
+It's somewhat unusual to put definitions of methods on the same line, as the signature.
+JH does it quite a lot for one-liners, to be able to see all the code on the screen at once.  
+Many programmers have that approach, and works well for some that are very productive. 
 It's not common in Python —some people are quite against it—.
-At work if your colleagues don't write Python this way,  you probably shouldn't either. 
-But if you can  get away with it I think it works quite well. 
 
-Now that we've created something  that lets us index into things, 
-we're allowed to use this one feature in Pytorch.   
-To create a  tensor, which is basically like our Matrix, we can now pass a list into tensor() 
-to  get back a tensor version of that list.
-More interestingly, we can pass in a list of lists (img) 
-and give this a name, tens.
+Now that we created something that lets us index into things, we can use this feature in Pytorch.   
+To create a  tensor, basically like our Matrix, we pass a list into tensor() and get back a tensor version of that list.
+More interestingly, we can pass in a list of lists (img), and give this a name, tens.
 Now we can say tens[20,15]. 
 
 We've successfully reinvented that, so we can convert all of our lists into tensors. 
-A convenient way to do this is to use the map function  in the Python standard library.  
+A convenient way to do this is to use the map function in the Python standard library.  
 `map` takes a function and some iterables, in this case one iterable,  
 and it's going to apply this function to each of these four things and return those four things.
 We can put four results on the left to receive those four outputs.
@@ -234,9 +209,9 @@ This is how we constructed one before, passing it list of lists.
 We can also pass it NumPy arrays, change types, etc.
 Its worth reading through, not going to look at every single  method,
 but browse through it to get a general sense.
-Tensors do just about everything for  numeric programming.  
-We want to know about every single one of these, or at least be aware roughly what  
-exists so you know what to search for in the docs.
+Tensors do just about everything for numeric programming.  
+We want to know about every single one of these, or at least to be aware of what  
+exists so we know what to search for in the docs.
 Otherwise we end up recreating stuff from scratch, which is slower than reading the documentation to find out it's there.
 
 Instead of chunks, or  islice, the reshape method is roughly equivalent in a tensor.
@@ -245,9 +220,8 @@ To reshape our 50,000 by 784 tensor into 50,000 28 by 28 tensors, we write `resh
 
 APL
 There is an interesting history of tensor/array programming that goes back to a language called APL.  
-Originally a mathematical notation, at first it was used to as a notation for 
-defining how certain IBM systems would work. 
-It's a mathematical notation that was designed to  be more consistent  expressive by Ken Iverson. 
+Originally a mathematical notation, it was used to as a notation for defining how certain IBM systems would work. 
+It's a mathematical notation that was designed to be more consistent expressive by Ken Iverson. 
 Implementations that allowed this notation to be executed on a computer were also called  APL. 
 Ken Iverson studied an area of physics called tensor analysis.  
 As he developed APL he took these ideas from tensor analysis and put them into a programming language. 
@@ -269,7 +243,6 @@ Many people who do APL say that they become better programmers in the process.
 There is a set of 17 study sessions of an hour or two each,
 covering  the entirety of the language, every single glyph.  
 
-
 So this batch of 50,000 28x28 images, a rank-3 tensor in Pytorch. 
 NumPy would call it an array with three dimensions, those are the same thing.  
 The rank is the number of dimensions. 
@@ -286,7 +259,7 @@ We're allowed to use `min()` and `max()` so we can find out in y_train what's th
 and what's the maximum number. 
 So they go from 0  to 9, which are scalar tensors. 
   
-We're allowed to use random numbers, because there is a random number generator in the python standard  library.
+We're allowed to use random numbers, because there is a random number generator in the python standard library.
 Still, we're going to do random numbers from scratch ourselves, because it's instructive.
 There is no way in pure software, to create a random number, we need a 
 [Hardware random number generator](https://en.wikipedia.org/wiki/Hardware_random_number_generator).
@@ -312,20 +285,18 @@ random numbers and therefore, if I call  it lots and lots and lots of times,
 and plot its histogram, I would expect to see  exactly this, which is each, from 0 to 0.1  
 there's a few, from 0.1 to 0.2 there's a few.  From 0.2 to 0.3 there's a few. 
 It's a fairly  evenly spread thing. These are the two key things  I would expect to see. An even distribution of  
-random numbers and that there's no correlation,  or no obvious correlation, from one to the other.
+random numbers and that there's no (obvious) correlation, from one to the other.
 
 We're going to create `rand()` a function that has the above properties, 
 using the Wickman-Hill algorithm, which Python used before version 2.3.  
 Random state is a global variable of one or more numbers. 
-We start with no random state at all,  and define a function `seed()` that we're going to pass something to. 
+We start with no random state at all, and define a function `seed()` that we're going to pass something to. 
 We can just mash the keyboard to create this number, or get it
 from a hardware generator ANU , Cloudflare, RDRAND, etc., or the current tick count in nanoseconds.
 In Python pretty much always use a number 42.
 There's various  ways of getting some random starting point.  
 When we pass it into `seed()`, it's going to do a bunch of modular divisions, 
 create a tuple of three things, and store them in this global state, `rnd_state`.
-
-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
 Now this function returns (pseudo) random numbers.  
 We pull out the random state at the start,  we do some math ops to it, 
@@ -353,7 +324,6 @@ This is why we've spent some time re-implementing the random number generator fr
 It will do 7 loops, and each one  will be seven times and it'll take the mean and  standard deviation. 
 So here I am going to generate  random numbers, 7,840 times and put them into 10  
 long chunks, and if I run that, it takes me three milliseconds per loop. 
-
 If I run it using Pytorch it takes 73 microseconds per  loop. 
 Wwe could use our version, but the Pytorch version is much, much faster. 
 

@@ -1,0 +1,769 @@
+Lesson 13, back propagation: notebook 03_ in the repo course22p2.  
+The forward and backward passes of a simple Multi-Layer Perceptron, a neural network. 
+First import and settings from previous notebooks. 
+Then loading MNIST data as tensors. 
+
+BACKGROUND REVIEW on DISPLAY
+Lets create a basic architecture for a neural network. 
+Let's consider a linear  model, the simplest example possible.
+We're gonna pick a single pixel `x` from MNIST pictures. 
+And so that will be our X.  
+And for our Y values is how likely is it that this is a specific number, say, the number three, 
+based on the value of this one pixel. 
+The pixel value is x and the probability of the image being the number "3" we  call Y. 
+If we just have a linear model,  then it's gonna look like this.
+And so in this case, it's saying that the brighter this pixel is, 
+the more likely it is that it's the number three. 
+There are a few problems with  this. The first one obviously is that as a linear  
+model, it's very limiting because maybe, you know,  we actually are trying to draw something that  
+looks more like this. So how would you do that?  Well, there's actually a neat trick we can use  
+to do that. What we could do is, well, let's first  of all talk about something we can't do. Something  
+we can't do is to add a bunch of additional  lines. So consider what happens if we say, okay,  
+well, let's add a few different lines. So let's  also add this line. So what would be the sum of  
+our two lines? 
+Well, the answer is, of  course, that the sum of the two lines   will itself be a line. 
+So it's not gonna help  us at all match the actual curve that we want.
+So here's the trick. Instead, we  could create a line like this.  
+That actually,  we could create this line. And now  consider what happens if we add this 
+original line with this new, what's not  a line, right? It's two line segments.
+So what we would get is this, everything to the  left of this point is going to not be changed  
+if I add these two lines together, because this  is zero all the way, and everything to the right 
+of it is going to be reduced. It looks like  they've got similar slopes. So we might end up  
+with, instead, so this would all disappear here.  And instead, we would end up with something like  
+this. And then we could do that again, right?  We could add an additional line that looks a  
+bit like that. So it would go, but this time it  could go even further out here. And it could be  
+something like this, see. So what if we added that? Well, again, at  the point underneath here, it's always zero,  
+so it won't do anything at all. But after that,  it's going to make it even more negatively sloped.  
+And if you can see, using this approach, we could  add up lots of these rectified lines, these lines  
+that truncate at zero, and we could create any  shape we want with enough of them. And these  
+lines are very easy to create because actually all  we need to do is to create just a regular line,  
+just create a regular line, right?  Which we can move up, down, left, right,  
+change its angle, whatever. And then just say, if it's greater than zero,  truncate it to zero. Or we could do the opposite  
+for a line going the opposite direction. If it's  less than zero, we could say truncate it at zero.  
+And that would get rid of, as we want,  this whole section here, and make it flat.
+Okay, so these are rectified lines.   And so we can sum up a bunch of these together  to basically match any arbitrary curve.  
+So let's start by doing that. Oh,  the other thing we should mention,   
+of course, is that we're going  to have not just one pixel,  
+but we're going to have lots of  pixels. So to start with the, kind of,  
+most, you know, slightly, the only  slightly less simple approach,  
+we could have something where we've got, you  know, pixel number one and pixel number two.   
+We're looking at two different pixels to see  how likely they are to be the number three.  
+And so, that would allow us to draw  
+more complex shapes that have  some kind of surface between them.
+Okay, and then we can do exactly the same thing, 
+is to create these surfaces, we can add  up lots of these rectified lines together,  
+but now they're going to be kind of rectified  planes. But it's going to be exactly the same  
+thing. We're going to be adding together a bunch  of lines, each one of which is truncated at zero.
+END OF REVIEW
+  
+Lets start by defining a few variables.  
+`n` is the number of training examples, `m` is the number of pixels, `c` is the number of possible values of our digits.
+Here there are 50,000 samples,  784 pixels and 10 possible outputs.  
+Now we decide (ahead of time) how many of these line segments to add up. 
+The number that we create in a layer is called the number of hidden nodes or activations, `nh`.
+Lets arbitrarily decide `nh=50`.  
+To create lots of lines, which  we're then going to truncate at zero,  we can do a matrix multiplication.  
+We're going to have 50000 rows by 784 columns to multiply by a 784 rows and 10 columns.
+
+Because if we take  this very first line of this first vector we have 784 pixel values of the first image. 
+We multiply it by each of the 784 values in the first column, the zero index column. 
+And that's going to give us a number in our output that is going to be images by 10 labels.
+We'll multiply those together and we'll add them up. 
+And that result is going to end up over here in this  first cell. 
+Each of these columns, it's going to eventually represent a probability.
+The first column will be the  probability of being a 0, the second column of a 1, etc.
+That's why we're going to have these 10  columns, each one allowing us to weight the  784 inputs. 
+
+Now we're going to have the 784x50 input going into a 784x50 output to create the 50 hidden layers. 
+Then we truncate those at zero and then multiply that by a 50x10 to create our 10 output.  
+We do it in two steps.  
+The way SGD works is that the weight matrix W is initially filled with 50000x50 random values.  
+For a linear function is not enough just to multiply we  also have to add. 
+The biases are the things we add, and we start those at zeros. 
+We need one bias for each output, ie 50.
+That will be layer one.
+
+Layer two will be a matrix that goes from 50 hidden.
+To simplify some of the calculations for the calculus we only create one output. 
+That's because we are not going to use cross entropy yet, instead, we are going to use MSE.
+The one output will be a predictor what digit do I think it is from 0 to 9.
+We compare those predictors (with little ^) to the actual labels. 
+Let's say we predict 9 and the actual is 2, and we'll compare those together using MSE,  
+which will be a stupid way to do it because it's saying that 9 is further away from being 2 than 2.
+9 is further away from 2 than it is from 4 in terms of how correct it is, which is not what we want at all.
+But this is what we're doing just to simplify our starting point. 
+So that's why we're going to have a single  output for this weight matrix and a single output for this bias. 
+
+Let's  create a function for putting x through a linear layer with these weights and these biases. 
+It's a matrix multiply and an add.
+If we put x_valid through our weights and biases with a linear layer, we end up with a 10,000 by 50. 
+So 10,000, 50 long hidden activations, not ready yet because  we have to put them through ReLU.
+Clamp at zero So  everything under zero will become zero. 
+
+And so here's what it looks like when we go through the linear layer and then the ReLU.   
+And you can see here's a tensor with a bunch of  things, some of which is zero or they're positive.  
+And so that's the result of  this matrix multiplication. 
+To create our basic MLP, multilayer  perceptron from scratch, we will take our  
+mini batch of x's, xb is a x batch. 
+We create our first layer's output with a linear, and then we will put that through a ReLU,  
+and then that will go through the second linear. 
+So the first one uses the w1, b1, and the second one uses the w2, b2.  
+And so we've now got a simple model. 
+And as  we hoped, when we pass in the validation set,  we get back 10,000 digits, so 10,000  by 1.
+Let's use our ridiculous loss  function of MSE. So, our results is 10,000 by 1  
+and our x_valid, sorry, our y_valid is just  a vector. Now what's gonna happen if I do  
+res minus y_valid? So before you continue in  the video, have a think about that. What's  
+gonna happen if I do res minus y_valid by thinking about the NumPy broadcasting rules we've learned?
+We've ended up  with a 10,000 by 10,000 matrix, 100 million  points. 
+Now we would expect an MSE to just contain 1,000 points.
+The reason it happened is because we have to start out at the last dimension and go right to left. 
+And we compare the  10,000 to the 1 and say, are they compatible?  
+By broadcasting rules, the answer is that this one will be broadcast over these 10,000.  
+So this pair here will give us 10,000 outputs.
+And then we'll move to the next one.  
+Oh, oh!, there is no next one. What happens?  
+Now, if you remember the rules, it inserts a unit  axis for us. 
+So we now have 10,000 by 1. 
+That  means each of the 10,000 outputs from here will end up being broadcast across the 10,000 rows here. 
+For each  of those 10,000, we'll have another 10,000, a 10,000 by 10,000 output, not what we want. 
+So how could we fix that?
+We really want this to be  10,000, 1 here. 
+If that was 10,000, 1, then we'd  compare these two, right to left, and they're  both 1. 
+So those match, and there's nothing to  broadcast because they're the same. And then  
+we'll go to the next one, 10,000 to 10,000, those  match. So they just go element wise for those. 
+And we'd end up with exactly what we want: 10,000 results. 
+Alternatively, we could remove this trailing dimension. 
+There's a couple of ways to do it.
+One is to grab every row in the zeroth column of res, that's gonna turn it from a 10,000 by 1 into a 10,000. 
+Alternatively, we can use .squeeze(). which removes all unit dimensions.
+We do the subtraction, now we get 10,000, just like we wanted. 
+Let's get our  training and validation wise. 
+We them into floats because we're using MSE.   
+
+Let's calculate our predictions for the  training set, which is 50,000 by 1. 
+We define an MSE function that does the subtraction and then squares it and then takes the mean.
+We now have a loss function being applied to our training set.
+
+Now we need gradients, which are slopes. 
+As we increase time a unit, the distance increases by what the slope is.  
+A neural network is a function that takes two groups of things: inputs and weights.
+We then take the result of that and we put it through some loss function, 
+get the predictions and compare it to our actual  dependent variable. 
+Given the derivative of the loss with respect to one particular weight, weight number zero, what is that doing? 
+As I increase the weight by a little bit, that would make the loss go down.
+Then obviously we want to increase the  weight by a little bit. 
+And if it makes the loss go up, we want to do the opposite.
+The derivative of the loss with respect to (each one of the) weights, tells us how to change  the weights. 
+We then change each weight by that derivative times a little bit  (LR) and subtract it from the original weights. 
+We do that a bunch of times, and that's called SGD.
+
+In this case there's a single input and a single output, so the derivative is a single number at any point.
+Like car speed. 
+But consider a more complex function, with one output, but there's two inputs.  
+To take the  derivative of this function,  then we must consider what happens to the output
+if we increase either of the inputs.   
+In that case, the derivative has two numbers, i.e., the derivative of the output Z with respect to each input.
+What happens if we change each of these two numbers? 
+These could be two different weights in our neural  network, and Z could be our loss.  
+We've got 784 inputs so we need 784 of these derivatives. 
+We don't normally write them all like that, we use the ∂ symbol to indicate the derivative 
+of the loss across all of them with respect to all of the weights. (It's a shorthand way of writing this.)
+
+It gets more complicated if, for example, in the first layer where we've got a weight matrix that's going to
+give us 50 outputs.
+So for every image we're going to have 784 inputs and 50 outputs to our function.
+Then as we increase the first input, how does that change both of the two outputs? 
+Ditto for all other input.
+Hence we end up with a matrix of derivatives, for every input that we how much does it change every output of that function? 
+We're going to calculate these derivatives,  but rather than being single numbers,
+they're matrices with a row for every input and a column for every output. 
+A single cell in that matrix will tell us as if I change an input by a little bit, how does it change this output?
+
+Eventually, we end up with a single number for every input, because our loss is going to be a single number.
+This is a SGD requirement: the loss has to be a  single number. 
+We get a single loss number by doing some operation, eg the sum or a mean.
+On the way there we're going to deal with these matrix of derivatives.
+
+JH and Terrence Parr wrote a paper "The Matrix Calculus ..."
+that only assumes high school calculus, and describes matrix calculus, with many examples. 
+A Jacobian matrix is a matrix of derivatives.
+We need to be able to calculate derivatives at least of a single variable.
+A computer can do that: using SimPy.
+For example, we define two symbols X and Y, we tell it to differentiate X squared with respect to X, 
+and SimPy will answer is 2X.
+If you say differentiate 3X² + 9 with respect  to X, SimPy will tell you that's 6X. 
+Wolfram Alpha does something similar. 
+With SimPy we can do it inside a notebook and include it in prose. 
+
+The CHAIN RULE
+
+The derivative of 3X² + 9  equals 6X.
+The derivative of A to the B with respect to A equals B times A. 
+The derivative of X squared with respect to X equals 2X. 
+For 3X² + 9 we can rewrite this as y = 3u + 9, and then write u = X². 
+The derivative of two things being added together is simply the sum of their derivatives.
+The derivative of any constant with respect to a variable is 0 because if I change something,  
+an input, it doesn't change the constant.  
+It's always 9. So that's going to end up as 0.  
+We end up with dY/dU equals something plus 0.  
+And the derivative of 3U with respect to U is 3 because it's just a line, that's its slope.
+We want to  dY/dX....  and dY/dX  is equal to dY/dU dU/dX.  
+dU/dX is 2X, so we can multiply these, 2X times 3, is 6X, which is what SimPy told us.
+
+This is the chain rule. 
+INTUITIVE ANIMATION
+To understand it intuitively see an interactive animation at  
+webspace.ship.edu/msrenault/geogebracalculus/derivative_intuitive_chain_rule.html
+We've got a wheel spinning around, and each time it spins around, this is X going up. 
+There's some change in X, dX over a period of time. 
+This wheel is eight times bigger than this wheel. 
+So each time this goes round once, if we connect the two together, this wheel would be going four times faster, 
+because the difference between, the multiple between 8  and 2 is 4. 
+Maybe I'll bring this up to here.
+So now that this wheel has got twice as big a  circumference as the u-Wheel, each time this  
+goes round once, this is going round two times.  
+Each time X goes round once, the change in U will be 2. 
+So that's what dU/dX is saying: The change in U for each change in X is 2.  
+Now, we could make this interesting by  connecting this wheel to this wheel.
+Now, this wheel is twice as small as this wheel.  
+Each time this  spins round once, this spins round twice,  
+because this has twice the circumference  of this, so therefore, dY/dU equals 2.
+But now that means every time this goes round once, this goes round twice, 
+every time this one goes round once, this gun goes  round twice. 
+Every time this one goes round once, this one goes round four times, dY/dX equals 4. 
+The dU/dX has to be multiplied with the  dY/dU to get the total. 
+So this is what's going on in the chain rule. 
+This is what you  want to be thinking about, is this idea that we've got one function that is kind of intermediary.   
+And so you have to multiply the two impacts to  get the impact of the X wheel on the Y wheel.  
+So I hope you find that useful. I find this,  personally, I find this intuition quite useful.
+END OF ANIMATION
+
+We want to calculate the gradient of our MSE applied to our model. 
+The inputs are going through a linear, a ReLU, another linear, and then an MSE. 
+So there's four different steps going on. 
+We combine those all together with the chain rule.
+It’s going  to be a function of the ReLU activations.  
+And the ReLU activations are a function of the first layer.
+And the first layer is a function of the inputs. 
+And it also has weights and biases, and we're going to calculate the derivative of that.  
+Now this is itself a  function, so we'll need to multiply that derivative by the derivative of that. 
+But that's also a function, so we have to multiply that derivative by this. and so forth.
+
+BACKPROPAGATION
+Our approach is to start at the end, take its derivative, and gradually keep multiplying as we go each step through. 
+This is back propagation, using the chain rule and taking advantage of a computational trick 
+of memorizing  some things on the way.
+So here's going to do a forward pass and a backward pass. 
+
+The forward pass is where we calculate the loss. 
+The loss is the output of the neural net minus our target squared and then take the mean. 
+And the output is going to be the output of the second linear layer.  
+The second linear layer's input will be  the ReLU. 
+The ReLU's input will be the first layer. 
+So we're going to take our  input, put it through a linear layer,  
+put that through a ReLU, put that through  a linear layer and calculate the MSE.
+
+The backward pass, we store the gradients of each layer (e.g., loss with respect to inputs), in the layer itself.
+We define a new attribute, `g`. 
+We define a new layer,`out` with a new attribute called out.g, to contain the gradients. 
+Here the derivative is two times the difference, because we've got difference squared.  
+We took the mean when computing the loss, so we have to do  the same thing here, i.e., divided by the input shape.  
+And so that's those gradients. 
+And now we need to multiply by the gradients of the previous layer, `lin(l2, w2, b2)`.
+What are the gradients of a linear layer? 
+`lin_grad` defines it.  
+Per the chain rule, we need to the weights and the biases of the layer, 
+and also the input to and the output from the linear layer.
+
+We store the gradients of our input.
+This would be the gradients of our output with respect to the input. 
+A matrix multiplier is just a whole bunch of linear  functions. 
+So each one slope is just its weight.  
+But we have to multiply it by the gradient  of the outputs because of the chain rule.  
+The gradient of the outputs with respect to the weights is going to be the input times the output summed up.
+I'll talk more about that in a moment. 
+The  derivatives of the bias is the gradients of the output added together because the bias is just a constant value. 
+And so for the chain rule, we simply  just use output times one, which is output.  
+So for this one here, again, we have to  do the same thing we've been doing before,  
+which is multiply by the output gradients because of the chain rule. 
+And then we've got the input weights. So every single one  of those has to be multiplied by the outputs.  
+And so that's why we have to  do an unsqueeze minus one. 
+
+iPDB
+Lets experiment with this code in order to understand it.
+It is harder to do this cell by cell because we want to put it all into this function. 
+We need a way to explore the calculations interactively. 
+And the  way we do that is by using the Python debugger, pdb.
+If we add `pdb.set_trace()` it tells the debugger to set a breakpoint to stop  execution when it reaches this line. 
+If we call `forward_and_backward`,  it stops at the breakpoint and the interactive Python debugger, 
+ipdb, has popped up an arrow pointing at the line of code it's about to run.
+At this point, there's a whole range of things  we can do to find out what they are.
+We hit h for help. 
+Understanding how to  use the Python debugger is important. 
+A most useful command is to print something. 
+Single letters indicate shortcuts, eg just `p` instead of typing `print`.   
+Let's take a look at the shape of the input: > p inp.shape.  
+So I've got a 50,000 by 50 input to the  last layer. So that makes sense. 
+These  are the hidden activations coming into the  last layer for every one of our images.
+What about the output gradients?  > p out.g.shape
+And there's that as well.  
+You don't have to use the p at all if your variable name is not the same as any of these commands.  
+So we could have just typed > out.g.shape.  
+
+We can also put in expressions.  
+Let's have a look at the shape of this (inp.unsqueeze...  )  
+So the output of this is, let's see if it makes sense. 
+We've got the input, 50,000 by 50. 
+We put a new axis on the end, unsqueeze(-1) is the same  as doing dot, as indexing it with [..., None].
+Let's put a new axis at the end. 
+So that would have become 50,000 by 50 by 1.  
+And then the out.g.unsqueeze() we're putting in  the first dimension. 
+So we're going to have 50,000  by 50 by 1 times 50,000 by 1 by 1. 
+We're  only going to end up getting this broadcasting  happening over these last two dimensions, 
+which is why we end up with 50,000 by 50 by 1.  
+And then with summing up over all of the inputs, as each image is individually contributing to the derivative. 
+So we want to add them all up to find their total impact, because  
+the derivative of a sum of functions is the sum of the derivatives of the functions. 
+So we can just sum them up.
+
+Now, this is one of these situations where if you see a times and a sum and an unsqueeze, it's  
+not a bad idea to think about Einstein summation  notation. 
+Maybe there's a way to simplify this.  
+So first of all, let's just see how we can do some  more stuff in the debugger. I'm going to continue.  
+So just continue running. So press c for continue, and it keeps running until it comes back again to  
+the same spot. 
+And the reason we've come to the  same spot twice is because lin_grad() is called  two times. 
+So we would expect that the second time we're going to get a different bunch of  inputs and outputs. 
+We can print out a  tuple of the inputs and output gradient. 
+This is the first layer going into the second layer. 
+So that's exactly what we'd expect.
+
+To find out what called this function, type w. 
+w is where am I? And so  you can see here where am I? 
+ ----> forward_and_backward 
+indicates who called  lin_grad() the  second time.
+Now we're in the line 
+----> w.g = (inp.unsquueze....
+
+If we want to find out what w.g ends up being equal to, 
+I can press n to say go to the next line, so we moved from line 5 to line 6.
+The instruction point is now looking at line six. 
+We can now print out, for example, w.g.shape,  and there's the shape of our weights.
+
+NB: In Python we can use breakpoint instead of import pdb business. 
+Unfortunately, the breakpoint  keyword doesn't currently work in Jupyter or in  IPython, 
+so we actually can't, sadly. That's why  we do it the old-fashioned way.  
+maybe they'll fix the bug at some point,  but for now, we have to type all this.
+
+So if I just press continue again,  it keeps running all the way to the end, and it's  
+now finished running forward and backward.  
+So when it's finished, we can return to a Jupyter cell and find that there will now be, for example, 
+a w1.g because this is the gradient that it just calculated, and also a x_train.g and so forth.
+
+XXXXXXXXXXXXXXXXXXXXXXXX  
+
+Let's see if we can simplify this a little bit. So I would be inclined to take  
+these out and give them their own variable names  just to make life a bit easier. It would have  
+been better if I'd actually done this before the  debugging, so it would be a bit easier to type.  
+So let's set i and o equal to input  and output dot g dot unsqueeze.  
+Okay, so we'll get rid of our breakpoint and  double check that we've got our gradients.
+
+And I guess before we rerun it, we  should probably set those to zero.  
+What I would do here to try things  out is I'd put my breakpoint there,  
+and then I would try things. So let's go next. And  so I realize here that what we're actually doing  
+is we're basically doing exactly the same thing  as an einsum would do. So I could test that out  
+by trying an einsum, right?, because  I've just got this as being replicated,  
+and then I'm summing over that dimension,  because that's the multiplication that I'm   doing. 
+So I'm basically multiplying the first  dimension of each and then summing over that  
+dimension. So I could try running that,  and, ah, it works. So that's interesting.  
+And I've got zeros because I did  x_train dot zero. That was silly.  
+So that should be dot gradients dot zero. Okay. So let's try doing an einsum.  
+And there we go. That seems to be working.  That's pretty cool. So we've multiplied this  
+repeating index. So we were just multiplying the  first dimensions together and then summing over  
+them. So there's no i here. Now, that's not quite  the same thing as a matrix multiplication, but we  
+could turn it into the same thing as a matrix  multiplication just by swapping i and j so that  
+they're the other way around. And that way we'd  have ‘ji, ik’. And we can swap into dimensions  
+very easily. That's what's called the transpose.  So that would become a matrix multiplication if  
+we just use the transpose. And in NumPy, the  transpose is the capital T attribute. So here  
+is exactly the same thing using a matrix  multiply and a transpose. And let's check.  
+Yeah, that's the same thing as well. Okay, cool. So that tells us that  now we've checked in our debugger  
+that we can actually replace  all this with a matrix multiply.  
+We don't need that anymore. Let's see if it works.  
+It does. All right. x_train.g. Cool.
+Okay, so hopefully that's convinced  you that the debugger is a really handy   
+thing for playing around with numeric  programming ideas or coding in general.  
+And so I think now's a good time to take a break.  So let's take a eight-minute break, and I'll see  
+you back here. Actually, seven-minute break. I'll  see you back here in seven minutes. Thank you.
+Okay, welcome back. So we've  calculated our derivatives,  
+and we want to test them. Luckily, PyTorch  already has derivatives implemented,  
+so I've got to totally cheat and use PyTorch to  calculate the same derivatives. So don't worry  
+about how this works yet, because we're  actually going to be doing all this from   scratch anyway. 
+For now, I'm just going  to run it all through PyTorch and check  
+that their derivatives are the same as ours,  and they are, so we're on the right track. 
+Okay, so this is all pretty  clunky. I think we can all agree,  
+and obviously it's clunkier than what we do  in PyTorch. So how do we simplify things?   
+There's some really cool  refactoring that we can do.  
+So what we're going to do is we're going to create  a whole class for each of our functions, 
+for the   ReLU function and for the linear function. So the  way that we're going to do this is we're going to  
+create a Dunder call. What does Dunder call  do? Let me show you. So if I create a class,  
+and we're just going to set that to print hello.  
+So if I create an instance of that class,  and then I call it as if it was a function,  
+oops, missing the Dunder bit here,   call it as if it's a function, it  says hi. So in other words, you know,  
+everything can be changed in Python. You can  change how a class behaves. You can make it look,  
+work like a function, and to do that, you simply  define Dunder call. You could pass it an argument,  
+like so. Okay, so that's what Dunder call  does. It just says it's just a  
+little bit of syntax sugary kind of  stuff to say, 
+I want to be able to   treat it as if it's a function without any method  at all. You can still do it the method way. You  
+could have done this. Don't know why you'd  want to, but you can. Because it's got this  
+special magic named Dunder call, you don't  have to write the dot Dunder call at all. 
+So here, if we create an instance of the ReLU  class, we can treat it as a function. And what  
+it's going to do is it's going to take its input  and do the ReLU on it. But if you look back at the  
+forward and backward, there's something very  interesting about the backward pass, which 
+is that it has to know about, for example, this  intermediate calculation gets passed over here.  
+This intermediate calculation gets passed over  here. Because of the chain rule, we're going to  
+need some of the intermediate calculations, and  not just the chain rule, because of actually how  
+the derivatives are calculated. So we need to  actually store each of the layer intermediate  
+calculations. And so that's why ReLU doesn't  just calculate and return the output, but it  
+also stores its output, and it also stores its  input. So that way, then, when we call backward,  
+we know how to calculate that. We set the inputs  gradient, because remember, we stored the input,  
+so we can do that, right? And it's going to  just be, oh, input greater than zero dot float,  
+right? So that's the definition,  okay, of the derivative of a ReLU.  
+And then chain rule. So that's how we can  calculate the forward pass and the backward pass  
+for ReLU, and we're not going to have to then  store all this intermediate stuff separately.   
+It's going to happen automatically. So we can do  the same thing for a linear layer. Now, a linear  
+layer needs some additional state, weights and  biases. ReLU doesn't, right? So there's no in it.  
+So when we create a linear layer, we have  to say, what are its weights, what are its   biases? 
+We store them away, and then when we  call it on the forward pass, just like before,  
+we store the input. So that's exactly the same  line here. And just like before, we calculate the  
+output and store it and then return it, okay?  And this time, of course, we just call lin.
+And then for the backward pass, it's the  same thing, okay? So the input gradients  
+we calculate just like before. Oh, .t()  is exactly the same with a little t as  
+big T is as a property. So that's the  same thing. That's just the transpose.  
+Calculate the gradients of the weights.  Again, with a chain rule and the bias,  
+just like we did it before, and they're  all being stored in the appropriate places.
+And then for MSE, we can do the same thing. We  don't just calculate the MSE, but we also store   it. 
+And we also, now the MSE needs two things, an  input and a target, so we'll store those as well.  
+So then in the backward pass, we can calculate  its gradient of the input as being two times.  
+The difference. And there it all is. Okay. So our model now is much easier to define.  
+We can just create a bunch of layers, linear, w1,  
+b1, ReLU, linear, w2, b2. And then we can store  an instance of the MSE. So this is not calling  
+Mse. It's creating an instance of the Mse class.  And this is an instance of the Lin class. This is  
+an instance of the Relu class. So they're just  being stored. So then when we call the model,  
+we pass it our inputs and our target. We go  through each layer, set x equal to the result  
+of calling that layer, and then pass that  to the loss. 
+So there's something kind of   interesting here that you might have noticed,  which is that we don't have… There we do it.
+Something interesting here is that we don't have  two separate functions inside our model, the loss  
+function being applied to a separate neural net.  But we've actually integrated the loss function  
+directly into the neural net, into the model. See  how the loss is being calculated inside the model?  
+Now, that's neither better nor worse than  having it separately. It's just different.   
+And so generally a lot of HuggingFace stuff does  it this way. They actually put the loss inside  
+the forward. Most stuff in fastai and a lot of  other libraries does it separately, which is the  
+loss is a whole separate function, and the model  only returns the result of putting it through   the layers. 
+So for this model, we're going to  actually do the loss function inside the model.
+So for backward, we just do each thing. So  self.loss.backward(). So that self.loss is the  
+Mse() object. So that's going to call backward,  right? And it's stored when it was called here.  
+It was storing, remember, the inputs, the targets,  the outputs, so it can calculate the backward().  
+And then we go through each layer is in  reverse, right? 
+This is back propagation,   backwards reversed, calling backward on each  one. So that's pretty interesting, I think.
+So now we can calculate the  model. We can calculate the loss.  
+We can call backward. And then we can check that  each of the gradients that we stored earlier  
+are equal to each of our new gradients.
+Okay, so William's asked a very good question.  That is, if you do put the loss inside here,  
+how on earth do you actually get predictions?  So generally what happens is in practice,  
+HuggingFace models do something like this. They'll  say self.preds equals x. And then they'll say  
+self.final_loss equals that. And then  return self.final_loss. And that way,  
+I guess you don't even need that last bit. Well,  that's with them anyway. 
+That is what they do. So   we'll leave it there. And so that way you can  kind of check, like, model.preds, for example.
+So it'll be something like that. Or  alternatively, you can return not just the loss, 
+but both as a dictionary, stuff like that. So  there's a few different ways you could do it.  
+Actually, now I think about it, I think that's  what they actually return both as a dictionary.   
+So it would be like return dictionary loss  equals that, comma, preds equals that,  
+something like that, I guess is what they would  do. Anyway, there's a few different ways to do it.
+Okay, so hopefully you can see that this is  really making it nice and easy for us to do our  
+forward pass and our backward pass without all  of this manual fiddling around. Every class now  
+can be totally separately considered and can  be combined however we want. We could create  
+layers. So you could try creating  a bigger neural net if you want to. 
+But we can refactor it more. So basically, as  a rule of thumb, when you see repeated code,  
+self.inp equals inp, self.inp equals inp, self.out  equals return self.out, self.out equals return  
+self.out. That's a sign you can refactor things.  And so what we can do is a simple refactoring is  
+to create a new class called module. And module  is going to do those things we just said. 
+It's   going to store the inputs. And it's going to call  something called self.forward in order to create  
+our self.out because remember that was one of  the things we had again and again and again,   
+self.out, self.out. And then return it. And so  now there's going to be a thing called forward, 
+which actually in this it doesn't do anything   because the whole purpose of  this module is to be inherited.
+When we call backward, it's going to call  self.backward passing in self.out because  
+notice all of our backwards always wanted to  get hold of self.out, right? Self.out, self.out,  
+because we need it for the chain rule. So let's  pass that in and pass in those arguments that  
+we stored earlier. And so star means take all  of the arguments regardless whether it's zero,  
+one, two or more and put them into a list. And  then that's what happens when it's inside the  
+actual signature. And then when you call  a function using star, 
+it says take this   list and expand them into separate arguments  calling backward with each one separately.
+So now for Relu, look how much simpler it  is. Let's copy the old Relu to the new Relu.  
+So the old Relu had to do all this  storing stuff manually. Handed out  
+all the self.stuff as well. But now we can get  rid of all of that and just implement forward  
+because that's the thing that's being called  and that's the thing that we need to implement.  
+And so now the forward of Relu just does the  one thing we want, which also makes the code 
+much cleaner and more understandable. Ditto for  backward. It just does the one thing we want.  
+So that's nice. Now we still have to multiply  it by the chain rule manually.  
+But so the same thing for linear (*Lin), same  thing for Mse. So these all look a lot nicer. And  
+one thing to point out here is that there's often  opportunities to manually speed things up when you  
+create custom autograd functions in PyTorch.  And here's an example. Look, this calculation  
+is being done twice, which seems like  a waste, doesn't it? So at the cost of  
+some memory, we could instead store  that calculation as diff. Right?
+And I guess we'd have to store it for use  later, so it would need to be self.diff.  
+And at the cost of that memory,  
+we could now remove this redundant calculation  because we've done it once before already and  
+stored it and just use it directly. And this is  something that you can often do in neural nets. So  
+there's this compromise between storing things,  the memory use of that, and then the computational  
+speedup of not having to recalculate it.  This is something we come across a lot.   
+And so now we can call it in the same way, create  our model, passing in all of those layers. So you  
+can see with our model, we're just, so the model  hasn't changed at this point. The definition was  
+up here. We just pass in the layers. Sorry,  not the layers, the weights for the layers.  
+Calculate the loss, call backward,  and look, it's the same. Hooray.
+Okay. So thankfully PyTorch has  written all this for us. 
+And remember, according to rules of our game,  once we've reimplemented it,   we're allowed to use PyTorch's version.  
+So PyTorch calls their version nn.Module.  
+And so it's exactly the same. You  inherit from nn.Module. 
+So if we   want to create a linear layer just like this  one rather than inheriting from our module,  
+we will inherit from their module.  But everything's exactly the same.   
+So we create our, we can create our random  numbers. So in this case, rather than passing  
+in the already randomized weights, we're actually  going to generate the random weights ourselves and  
+the zeroed biases. And then here's our linear  layer, which you could also use Lin for that,  
+of course. So we defined our forward. And  why don't we need to define backward? Because  
+PyTorch already knows the derivatives of all  of the functions in PyTorch, and it knows how  
+to use the chain rule. So we don't have to  do the backward at all. 
+It'll actually do   that entirely for us, which is very cool. So  we only need forward. We don't need backward.
+So let's create a model that uses nn.Module.  Otherwise, it's exactly the same as before.  
+And now we're going to use PyTorch's mse_loss()  because we've already implemented ourselves.  
+It's very common to use torch.nn.functional as F.  This is where lots of these handy functions live,  
+including mse_loss(). And so now you  know why we need the colon, comma, none,  
+because you saw the problem if we don't have  it. And so create the model, call backward.  
+And remember, we stored our gradients in  something called .g. PyTorch stores them  
+in something called .grad, but it's doing exactly  the same thing. So there is the exact same values.
+So let's take stock of where we're up to.  So we've created a matrix multiplication  
+from scratch. We've created linear layers. We've  created a complete backprop system of modules we  
+can now calculate both the forward pass and the  backward pass for linear layers and values so  
+we can create a multilayer perceptron. So we're  now up to a point where we can train a model.
+
+
+
+So let's do that.
+minibatch training, notebook number four.  So same first cell as before. We won't go  
+through it. This cell's also the same as  before, so we won't go through it. Here's  
+the same model that we had before, so we won't  go through it. So just rerunning all that to see.
+Okay. So the first thing we should do, I  think, is to improve our loss function so  
+it's not total rubbish anymore. So if  you watched Part 1, you might recall  
+that there are some Excel notebooks. One of  those Excel notebooks is entropy example.
+Okay. So this is what we looked at. So just to  remind you, what we're doing now is we're saying,  
+okay, rather than outputting a single number  for each image, we're going to instead output  
+ten numbers for each image. And so  that's going to be a one-hot encoded  
+set of, it will be like 1, 0, 0, 0, et cetera.  And so then that's going to be, well, actually  
+the outputs won't be 1, 0, 0. They'll be basically  probabilities, won't they? So it'll be like 0.99,  
+0.01, et cetera. And the targets will  be one-hot encoded. So if it's the digit  
+0, for example, it might be 1, 0, 0, 0, 0,  dot, dot, dot for all the ten possibilities.  
+And so to see how good is it, so in this case  it's very good. It had a 0.99 probability  
+prediction that it's a zero and indeed it is  because this is the one-hot encoded version.
+And so the way we implement that is we don't  even need to actually do the one-hot encoding,  
+thanks to some tricks. We can actually just  directly store the integer, 
+but we can treat it as if it's one-hot encoded. So we can just  store the actual target zero as an integer.  
+So the way we do that is we say, for example,  for a single output, oh, it could be cat,  
+let's say cat, dog, plane, fish, building.  The neural net spits out a bunch of outputs.  
+What we do for softmax is we go e to the power of  each of those outputs. We sum up all of those e  
+to the power of ‘s. So here's the e to the power  of each of those outputs. Here's the sum of them.  
+And then we divide each one by the sum. So divide  each one by the sum. That gives us our softmaxs.  
+And then for the loss function, we then compare  those softmaxs to the one-hot encoded version.  
+So let's say it was dog. Then it's going to  have a one for dog and zero everywhere else.  
+And then softmax, this is from this nice blog post  here. This is the calculation sum of the ones and  
+zeros. So each of the ones and zeros multiplied  by the log of the probabilities. So here is the  
+log probability times the actuals. And  since the actuals are either 0 or 1 and  
+only one of them is going to be a 1, we're  only going to end up with one value here.   
+And so if we add the up, it's  all 0 except for one of them. 
+So that's cross entropy. So in this special  case where the output's one-hot encoded,  
+then doing the one-hot encoded multiplied  by the log softmax is actually identical  
+to simply saying, oh, dog is in this row.  Let's just look it up directly and take its  
+log softmax. We can just index directly  into it. So it's exactly the same thing.
+So that's just review. So if you  haven't seen that before, then yeah,   
+go and watch the Part 1 video where we  went into that in a lot more detail.
+Okay. So here's our softmax calculation.  It's e to the power of each output divided  
+by the sum of them, or we can use sigma  notation to say exactly the same thing.  
+And as you can see, Jupyter Notebook lets us  use LaTeX. If you haven't used LaTeX before,  
+it's actually surprisingly easy to learn. You just  put dollar signs around your equations like this,  
+and your equations' backslash is going to  be kind of like your functions, if you like,  
+and curly parentheses, curlies are used to  kind of for arguments. So you can see here,  
+here is e to the power of, and then underscore is  used for a subscript. So this is x subscript i,  
+and power of is used for  superscripts. So here's dots.  
+You can see here it is, dots. So it's actually,  yeah, learning LaTeX is easier than you might  
+expect. It can be quite convenient for  writing these functions when you want to. 
+So anyway, that's what softmax is. As we'll see in  a moment, well, actually, as you've already seen,  
+in cross-entropy, we don't really want softmax,  we want log of softmax. So log of softmax is,  
+here it is. So we've got x.exp(), so e  to the x, divided by x dot exp dot sum,  
+and we're going to sum up over the last dimension.  And then we actually want to keep that dimension  
+so that when we do the divided by, we want a  trailing unit axis for exactly the same reason  
+we saw when we did our MSE loss function. So if  you sum with keepdim=True, it leaves a unit axis  
+in that last position so we don't have to put it  back to avoid that horrible out of product issue.
+So this is the equivalent of this and then .log().  
+So that's log of softmax. So there is the  log of the softmax with the predictions.  
+Now, in terms of high school math that you  may have forgotten, but you definitely are  
+going to want to know, a key piece in that  list of things is log and exponent rules.  
+So check out Khan Academy or similar if  you've forgotten them, but a quick reminder  
+is, for example, the one that we mentioned here. log(a/b) = log(a) - log(b)
+And equivalently, log(a * b) = log(a) + log(b)
+And these are very handy because, for  example, division can take a long time,  
+multiplier can create really big numbers that  have lots of floating point error. Being able  
+to replace these things with pluses and minuses is  very handy indeed. In fact, I used to give people  
+an interview question 20 years ago at a company  which I did a lot of stuff with SQL and math.
+SQL actually only has a sum function for group  by clauses, and I used to ask people how you  
+would deal with calculating a compound interest  column where the answer is basically that you  
+have to say, because this compound interest is  taking products, 
+so it has to be the sum of the   log of the column and then e to the power  of all that. So there's like all kinds of  
+little places that these things come in handy,  but they come into neural nets all the time.
+So we're going to take advantage of that because  we've got a divided by that's being logged.  
+And also, rather handily, we're going to  have, therefore, the log of x.exp() minus  
+the log of this, but exp and log are opposites,  so that is going to end up just being x minus.  
+So log softmax is just x minus all this logged.  And here it is, all this logged. So that's nice.
+So here's our simplified version. Okay,  now there's another very cool trick,  
+which is one of these things I figured out  myself and then discovered other people had   known it for years. 
+So not my trick, but  it's always nice to rediscover things.  
+The trick is what's written here.  Let me explain what's going on.   
+This piece here, the log of this sum, right,  this sum here, we've got x det exp dot sum. Now,  
+x could be some pretty big numbers, and e to the  power of that is going to be really big numbers.   
+And e to the power of things creating really big  numbers, well, really big numbers, there's much  
+less precision in your computer's floating point  handling. The further you get away from zero,  
+basically. So we don't want really big numbers,  particularly because we're going to be taking   derivatives. 
+And so if you're in an area that's  not very precise, as far as floating point math  
+is concerned, then the derivatives are going to  be a disaster. 
+They might even be zero because   you've got two numbers that the computer can't  even recognize as different. So this is bad.
+But there's a nice trick we can do to make it a  lot better. What we can do is we can calculate the  
+max of a, sorry, the max of x, right?, and we'll  call that a. And so then rather than doing the log  
+of the sum of e to the xi, we're instead going to  define a as being the minimum, sorry, the maximum  
+of all of our x values. It's our  biggest number. Now, if we then subtract  
+that from every number, that means none of the  numbers are going to be big by definition because  
+we've subtracted it from all of them. Now, the  problem is that's given us a different result,  
+right? But if you think about it, let's expand  this sum. It's e to the power of x1, if we don't  
+include our minus a, plus e to the power of  x2, plus e to the power of x3 and so forth.
+Okay. Now, we just  subtracted a from our exponents, which has meant  we're now wrong. 
+But I've got good news and bad news. The bad news is that  you've got more high school math to remember,  
+which is exponent rules. So x to the a  plus b equals x to the a times x to the b.  
+And similarly, x to the a minus b  equals x to the a divided by x to the b.
+And to convince yourself that's  true, consider, for example,   2 to the power of 2 plus 3. 
+What is that? Well,  you've got 2 to the power of 2 is just 2 times 2.  
+And 2 to the power of 2 plus 3, well,  it's 2 times 2 times, it is 2 to the  
+power of 5. So you've got 2 to the power of  2, you've got two of them here, 
+and you've   got another three of them here. So we're just  adding up the number to get the total index.
+So we can take advantage of this here and say,  like, oh, well, this is equal to e to the x1 over  
+e to the a plus e to the x2  over e to the a plus e to the x3  
+over e to the a. And this is a common  denominator, so we can put all that together.  
+e to the a. And why did we do all that? Because  if we now multiply that all by e to the a,  
+these would cancel out and we get  the thing we originally wanted.   
+So that means we simply have to multiply this  
+by that, and this gives us exactly  the same thing as we had before.  
+But with, critically, this is no longer ever  going to be a giant number. So this might seem  
+a bit weird. We're doing extra calculations. It's  not a simplification, it's a complexification.  
+But it's one that's going to make it  easier for our floating point unit. 
+So that's our trick, is rather than doing log  of this sum, what we actually do is log of  
+e to the a times the sum of e to the x minus  a. And since we've got log of a product, that's  
+just the sum of the logs, and log of e to the a  is just a. So it's a plus that. So this here is  
+called the log sum exp trick.
+Oops, people pointing out that  I've made a mistake. Thank you.  
+That, of course, should have  been inside the log. You can't  
+just go sticking it on the outside like a  crazy person. That's what I meant to say.
+Okay, so here is the log sum exp trick. Oh,  I caught it m instead of a, which is a bit   silly. 
+I should have caught it a. But anyway,  so we find the maximum on the last dimension,  
+and then here is the m plus that exact thing.
+Okay, so that's just another way of doing  that. Okay, so that's the logsumexp().
+So now we can rewrite log_softmax() as x  minus logsumexp(), and we're not going to  
+use our version because PyTorch already  has one, so we'll just use PyTorch's.  
+And if we check, here we go. Here's our results.  
+And so then as we've discussed, the cross  entropy loss is the sum of the outputs times  
+the log probabilities. And as we discussed, our  outputs are one-hot encoded, or actually they're  
+just the integers, better still. So what we can do  is we can, I guess I should make that more clear.  
+Actually, they're just the integer indices.
+So we can simply rewrite that  as negative log of the target.  
+So that's what we have in our Excel. And so  how do we do that in PyTorch? So this is quite  
+interesting. There's a lot of cool things you  can do with array indexing in PyTorch and NumPy,  
+so basically they use the same  approaches. Let's take a look. Here is the first three actual values  in y_train. 
+They're 5, 0, and 4.  
+Now, what we want to do is we want to find  in our softmax predictions, we want to get  
+5, the fifth prediction in the zeroth row,  
+the 0 prediction in the first row, and  the 4 prediction in the index two row.
+So these are the numbers that we want. This  is going to be what we add up for the first 
+two rows of our loss function. So how do we  do that in all in one go? Well, here's a cool  
+trick. See here I've got 0, 1, 2. If we index  using a two lists, we can put here 0, 1, 2,  
+and for the second list we can put y_train  column three: 5, 0, 4, and this is going to be 0 comma 5, 1 comma 0, and 2 comma 4,  
+which is, as you see, exactly the same thing. So therefore, this is actually giving us  what we need for the cross entropy loss.  
+So if we take range of our target's  first dimension, or zero index dimension,  
+which is all this is, and the target, and  then take the negative of that dot mean,  
+that gives us our cross entropy loss,  which is pretty neat, in my opinion.
+All right, so PyTorch calls this negative log  likelihood loss, but that's all it is. And so  
+if we take the negative log likelihood  and we pass that to the log soft max,  
+then we get the loss. And this  particular combination in PyTorch  
+is called F.cross_entropy(). So just check, yep,  F.cross_entropy() gives us exactly the same thing.  
+So that's cool. So we have now reimplemented the cross entropy  loss. And there's a lot of confusing things going  
+on there, a lot. And so this is one of those  places where you should pause the video and go  
+back and look at each step and think not just  like what is it doing, but why is it doing it,  
+and also try typing in lots of different values  yourself to see if you can see what's going on,  
+and then put this aside and test  yourself by reimplementing log_softmax()  
+and nll_loss() and cross_entropy() yourself  and compare them to PyTorch's values.
+And so that's a piece of  homework for you for this week.  
+So now that we've got that, we can actually  create a training loop. 
+So let's set our   loss function to be cross entropy. Let's  create a batch size of 64. And so here's  
+our first mini batch. Okay, so xb is the x  mini batch. It's going to be from 0 up to 64  
+from our training set. So we can now calculate  our predictions. So that's 64 by 10. So for  
+each of the 64 images in the mini batch, we  have 10 probabilities, one for each digit.
+And our Y is just, let's print those out.  
+So there's our first 64 target values. So these  are the actual digits. And so our loss function,  
+so we're going to start with a bad loss  because it's entirely random at this point.  
+Okay, so for each of the predictions we made,  
+so those are our predictions. And so  remember those predictions are a 64 by 10.  
+What did we predict? So for each one of  these 64 rows, we have to go in and see  
+where is the highest number. So if we go  through here, we can go through each one.  
+Here's a, it's a 0.1. Okay, it looks like this  is the highest number. So it's 0, 1, 2, 3. So  
+it's the highest number is this one. So you've  got to find the index of the highest number.   
+The function to find the index of the highest  number is called argmax. And yep, here it is, 3.  
+And I guess we could have also written this  probably as preds.argmax(). Normally you can  
+do them either way. I actually prefer normally  to do it this way. Yep, there's the same thing.
+Okay, and the reason we want this is because we  want to be able to calculate accuracy. 
+We don't   need it for the actual neural net, but we just  like to be able to see how we're going because  
+it's like it's a metric. It's something that we  use for understanding. So we take the argmax,  
+we compare it to the actual. So that's going  to give us a bunch of bools. If you turn those  
+into floats, there'll be ones and zeros and  the mean of those floats is the accuracy. 
+So our current accuracy, not surprisingly, is  around 10%. It's 9% because it's random. That's  
+what you would expect. So let's train our first  neural net. So we'll set a learning rate. We'll  
+do a few epochs. So we're going to go through  each epoch and we're going to go through from  
+0 up to n. That's the 50,000 training rows.  And skipping by 64, the batch size, each time.  
+And so we're going to create a slice that  starts at i, so starting at 0, and goes up to  
+64 unless we've gone past the end, in which  case we'll just go up to n. And so then we  
+will slice into our training set for the x  and for the y to get our x and y batches.  
+We will then calculate our predictions,  our loss function, and do our backward.
+So the way I did this originally was I had all  of these in… oopsie-daisy, in separate cells  
+and I just typed in, you know, i equals zero  and then went through one cell at a time,  
+calculating each one until they all worked.  And so then I can put them in a loop.
+Okay, so once we've got  done backward, we can then,  
+with torch.no_grad(), go through each layer  and if that's a layer that has weights,  
+we'll update them to the existing weights  minus the gradients times the learning rate.  
+And then zero out, so the weights and biases for  the gradients, the gradients of the weights and  
+biases. This underscore means do it in place.  So that sets this to zero. So if I run that,  
+oops, got to run all of  them. I guess I skipped cell.
+There we go. It's finished.  
+So you can see that our accuracy on  the training set, it's a bit unfair,  
+but it's only three epochs, is nearly  97%. So we now have a digit recognizer.  
+It trains pretty quickly and is not terrible  at all. So that's a pretty good starting point.
+All right, so what we're going to do next time is  we're going to refactor this training loop to make  
+it dramatically, dramatically, dramatically  simpler, step by step until, eventually,  
+we will get it down to, so we'll get it down  to something much, much shorter. And then  
+we're going to add a validation set to it and  a multi-processing data loader, and then, yeah,  
+we'll be in a pretty good position, I think,  to start training some more interesting models.
+All right. Hopefully you found that useful  and learned some interesting things. And so  
+what I'd really like you to do is, at this  point, now that you've kind of like got all  
+these key basic pieces in place, is to really  try to recreate them without peaking as much  
+as possible. 
+So, you know, recreate your matrix  multiply, recreate those forward and backward  
+passes, recreate something that steps through  layers, and even see if you can like recreate  
+the idea of the dot forward and the dot backward.  Make sure it's all in your head really clearly so  
+that you fully understand what's going on. 
+You  know, at the very least, if you don't have time  
+for that, because that's a big job, you could pick  out a smaller part of that, 
+the piece that you're   more interested in, or you could just go through  and look really closely at these notebooks. So if  
+you go to kernel, restart and clear output, it'll  delete all the outputs and like try to think like  
+what are the shapes of things? Can you guess  what they are? Can you check them? And so forth.
+Okay. Thanks, everybody. Hope you have a  great week and I will see you next time. Bye.

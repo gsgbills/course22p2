@@ -1,0 +1,844 @@
+Lesson 14
+
+In L13 we covered how we implement the chain rule in neural network training with backpropagation. 
+Kaushik Sinha has produced a very nice explanation of the code that we looked at last time and I've linked  to it. 
+So it's got the math and then the code.  
+The code's slightly different to what I had, some minor changes.
+So you'll find that in the Lesson 13  resources. 
+
+Lets explain the link between the math and the code.  
+We have a neural network N and a loss function L that together calculate a loss, 
+L, the loss function, is being applied to the output of the neural network. 
+N, say it is just a linear layer, takes weights and inputs.
+L also requires the targets, but lets ignore that for now because it's not relevant. 
+To update  the weights, we need to know how does the loss change if we change the weights, one weight at a time.
+So how do we calculate that? 
+Lets rewrite our loss function. 
+N is the output result of the neural network applied to the weights and the inputs. 
+L = l(N), the loss function l applied to N the output of the neural network.
+By the chain rule, the derivative of the loss with respect to the weights is equal to 
+the derivative of the loss with respect to N times the derivative of N with respect to the weights.
+I'm going to get my notation consistent since these are not scalar with respect to the weights.  
+We can get rid of those and we end up with the change in loss with respect to the weights. 
+This is what the chain rule is.
+
+So the change in the loss with respect to the output of the neural network.
+We did the forward pass (in `forward_and_backward`) and then we calculated 
+`out.g` the derivative of the loss with respect to the output of the neural network,  
+which came out from here and ended up in diff. 
+out.g contains this derivative.  
+The change in the loss with respect to the inputs, we can do the same thing with the chain rule times…  
+And so this time we have the inputs. 
+So here you can see that is this line of code. 
+
+inp.g is the change in the loss with respect to the inputs,
+is equal to the change in the loss with respect to the output,
+Times (matrix times, because we're doing matrix calculus), this derivative.
+And since this is a linear layer we were looking at, this derivative is simply the weights themselves.  
+Then we have the same thing for w.g, which is the derivative of the loss with respect to the weights. 
+We showed how to we can simplify this into also a matrix product with a transpose.  
+That's how the code is mapping to the math.  
+JH recommends 3Blue1Brown's essence of calculus series and also Khan  Academy. 
+
+Previously we implemented from scatch a training loop which did these four steps.  
+After implementing something that is in the library we use that version. 
+(argmax is easy to implement.) 
+We successfully trained an MNIST model to accurately recognize handwritten digits.  
+This is not a great metric, it is only looking at one batch of the training set. 
+JH refactored it, pulled out a `report` function, which runs at the end of each epoch,
+printing out the loss and the accuracy. 
+Python f-strings lets us pop a variable or an expression inside curly braces in a string and  it'll evaluate it. 
+The colon is a format specifier to can change how things are printed in an f-string, e.g., 2 decimal places. 
+TODO: Look up https://realpython.com/python-formatted-output/ a tutorial on f-strings and format specifiers.
+
+Keyboard shortcuts:
+If you're wondering how I just reran  all the cells above where I was, there's a cell here. 
+There's Run All Above.  And it's so helpful that I always make sure  
+there's a keyboard shortcut for that. So you  can see here, I've added a keyboard shortcut  
+QA. So if I type QA, it runs all cells above. If  I type QB, it runs all cells below. And so yeah,  
+stuff that you do a lot, make sure you've got  keyboard shortcuts for them. 
+You don't want to be fiddling around, moving around your mouse everywhere. 
+You want it to be as easy as thinking.  
+
+We built and trained a neural network model from scratch and it works okay. 
+But it is a bit clunky, there's a lot of code and there are missing features. 
+Lets refactor it so we write less code for the same work.  
+Lets look at something useful that's part of PyTorch and then build it. 
+
+PyTorch's torch.nn which has the Module class. 
+We don't normally use it this way, but just to see how it works. 
+We create an instance of `m1` of Module and then we can assign things to its attributes.
+Let's assign a linear  layer to it.
+We print it and it is a  module containing foo, a linear layer. 
+Then we can ask, show me all of the named children of that module:
+there's one called foo and it's a linear layer.  
+And we can ask for all of the parameters of this module:
+There's two of them, a four by three tensor, that's the weights, and a four long vector, that's the biases.  
+
+Just by creating this module and assigning to it, it's automatically tracked 
+what's in this module and what are its  parameters. 
+So we're going to see both how and why it does that. 
+Why did we add list() here?  
+If we just said m1.named_children(), it just prints out the generator object, which is not very  helpful. 
+And that's because this is an iterator called a generator, that 
+is only going to produce the contents of this when we do something with it, such as list them out.
+So just popping a list  around a generator is one way to run the generator and get its output. 
+So that's a little trick  when you want to look inside a generator.  
+
+What we normally do is create our own class. 
+For example, we'll create our own multi-layer perceptron and we inherit from nn.Module. 
+`__init__` is the special magic method that constructs an object of the class. 
+`n_in` is number of inputs to the multi-layer perceptron, hidden activations `nh` and output activations `n_out`.
+It is just be one hidden layer. 
+And then we can assign things as attributes, we can do that in this constructor.  
+We define `l1` attribute, which is a linear layer from number in to number hidden.
+`l2` is a linear layer from number hidden to number out.
+And we also create a ReLU.
+When we `__call__` that module, we can take the input that we get and run l1, then ReLU and then l2. 
+
+And so we create one of these,  `model`, and there is the attribute l1. 
+If we print out the model it shows all the stuff that's in it.
+Then we can go through each of the named children and  print out the name and the layer. 
+
+We can use __call__,  but it is better to refactor using `forward` 
+such that it would automatically do what is necessary to make all the automatic gradients.
+So instead of __call__, we would do `forward`. 
+This is an  example of creating a custom PyTorch module, that knows what are all the attributes
+we added to it and what are all the parameters. 
+We can go through the parameters and print out their shapes, 
+l1 weights, l1 biases, l2 weights, l2 biases.
+50 is because we set nh, the number of hidden, to 50.  
+
+Now we don't have to write the loop going through layers and making sure that they've all been put into a list.
+We've just been able to add them as attributes and they're automatically going to appear as parameters. 
+So we can just go through each parameter and update it based on the gradient and the learning rate. 
+And furthermore, we can `model.zero_grad()` and it'll zero out all of the gradients.
+That made our code simpler and more flexible.
+
+So let's check that this still works.
+If we called `report()` on this before `fit()` the accuracy is about 10%, and the loss is pretty high.
+And so after I run this fit(), this model, the accuracy goes up and the loss goes down.  
+Same as before, the only thing I've changed are the two lines of code. 
+  
+It used `__setattr__` to know what the parameters and layers.
+Lets define MyModule to "replace" nn.Module.
+In `__init__`, we define a dictionary for the named children, to contain all the layers. 
+We  define a couple of linear layers.
+Now we define the special magic Python ``__setattr__`,
+which is  called automatically by Python, if we have it, every time we set an attribute.
+It gets passed the name of the attribute, the key `k`, and the value `v` is the actual 
+thing on the right hand side of the equal sign.  
+Names that start with an underscore we use for private stuff. 
+So we check that it doesn't start with an underscore. 
+And if it doesn't start with an underscore, setattr will put the `v` value into the modules dictionary
+with this key and then call the normal Python’s `setattr` to make sure it does the attribute setting.
+`super()` is how we call whatever is in the base class.  
+
+Another useful thing to know about is how we just type the name and it lists out all this information about it.
+That is `__repr__`, which will return a stringified version of the modules dictionary.
+In `parameters` we go through each of the modules, go through each value, which are
+the actual layers and then go through each of the parameters in each module and yield p. 
+This creates an  iterator for all the parameters. 
+So we can create one of these modules and if we loop through its parameters, they are printed.
+
+Yield from (advanced Python):
+There's no need to  loop through a list or a generator and yield.
+There is  a shortcut: `yield from` and then give it the iterator.  
+And so with that, we can get this all down to one line of code and it'll do the same thing. 
+So that's basically saying yield one at a time, everything in here, that's  what yield from does. 
+ 
+We've created our own implementation of nn.Module and we are now allowed to use PyTorch's nn.Module. 
+  
+how would we do using the PyTorch nn.Module, how  would we create the model that we started with,  
+which is where we had this self.layers? Because we  want to somehow register all of these all at once.  
+That's not going to happen  based on the code we just wrote.  
+So to do that, let's have a look. 
+Let's make a list of the layers we want. 
+We'll create a subclass of nn.Module, call the `super()` class in it first, and store the list of layers.
+To tell PyTorch about all those layers, we have to loop through them and call
+`add_module()` and say the name of the module and what the module is.
+
+Question: what is super calling because we don't have a base class. 
+(we don't even need the parentheses here). 
+That's  because if you don't put any parentheses or if you put empty parentheses, it's a shortcut for writing `object`. 
+Python has stuff in `object`, which stores attributes so that we can get them back later. 
+
+It is awkward to have to store the list and then enumerate and call `add_module()`. 
+So now that we've implemented it, lets use PyTorch's version, `ModuleList`.   
+We use `ModuleList` and pass it a list of layers, it will register them.
+
+Lets define `SequentialModel`, like `nn.Sequential`. 
+So if I create it passing in the layer....
+You can see  there's my model containing the module list with my layers. 
+call fit() and there we go.
+
+So in forward we just go through each layer and set the result of that equal to calling that layer 
+on the previous result and then pass and return it at the  end. 
+
+Reduce:
+Another way of doing  this, lets see an example of something that we  see a lot in machine learning code:
+is the use of reduce(). 
+This `return reduce(lambda val,layer: layer(val), self.layers, x)` is the same as: 
+`for l in self.layers: x = l(x)  return x`
+`Reduce` implements a fundamental computer science concept, reduction.
+Reduction starts the third parameter, some initial value, e.g., `x`'.
+We're going to start with x, the thing with being  passed and then loop through a sequence,
+e.g., `self.layers`, and then for each  layer call a function, e.g. the lambda.
+The function is going to get passed, first the initial value and the first thing in the list. 
+So it's going to call the layer function on `x`. 
+The second time it takes the output of that and passes it in as the first parameter and passes in the second layer. 
+So then the second time this goes through, it's going to be calling the second layer on the result of the first layer.
+And so forth. 
+That's what a reduction is, a very general concept. 
+Here's how you can implement a sequential model using reduce(). 
+So there's no explicit loop there, although the loop is still happening internally.  
+
+Now that we've reimplemented sequential, we can just use PyTorch's version, nn.Sequential. 
+We can pass in our  layers and we can fit, and see the model. 
+Looks very  similar to the one we built ourselves.  
+
+OPTIM
+Looping through parameters and updating them based on gradients and a learning rate, 
+and then zeroing them is a common pattern, an **optimizer**, i.e., optim.
+Let's define our own optimizer.
+It's going to go through each of the parameters and update them using the gradient and the learning rate.
+And there's also `zero_grad`, which will go through each parameter  and set their gradients to zero.
+If you use .data, it is a way of avoiding having to say torch.no_grad, basically.  
+So in optimizer, we pass it the parameters that we want to optimize and the learning rate, and store them.
+Since the parameters might be a generator, we call list().  
+
+So we're going to create our optimizer, pass it in the model.parameters(), which have been  
+automatically constructed for us by nn.Module.  
+In the new loop we call `opt.step()`, and `opt.zero_grad()`.  
+We've now built our own SGD optimizer from scratch. 
+
+If we're having trouble using some complex library code, this can be a really good approach,
+to go all the way back, remove as many of the abstractions as we can and  
+run everything "by hand" to see exactly what's  going on.
+It can be really freeing to see that we can do all this. 
+
+PyTorch has this in torch.optim, optim.SGD(). 
+Like our version, you pass in the parameters and you pass in the learning rate, and it is just the same.  
+So let's define `get_model()` to return the sequential model and the optimizer for it. 
+We go `model.opt = get_model()`, and then we can call the loss function to see where it's starting.  
+And so then we can write our training loop  again.
+Go through each epoch, go through each starting point for our batches, grab the slice,  
+slice into our X and Y in the training set,  calculate our predictions, calculate our loss,  
+do the backward pass, do the optimizer step, do the zero gradient 
+and print out how you're  going at the end of each one. 
+
+DATASET:
+Let's keep making this simpler using the `Dataset` class. 
+To the Dataset class we're going to pass in our independent and dependent variable, 
+and store them as `self.x` and `self.y`.  
+We define __len__, that allows the len function to work. 
+So the length of the Dataset will just be the length of the independent variables.   
+And __getitem__ will be called automatically anytime we use square brackets in Python. 
+It is going to call this function passing in the indices that we want. 
+When we grab some items from our Dataset, we're going to return a tuple of the x values and  the y values. 
+So then we'll be able to do this.  
+
+Let's create a Dataset containing the x_train and y_train, 
+and another Dataset containing the x_valid and y_valid. 
+And those 2 datasets we'll call train_ds and valid_ds.
+So let's check the length of those datasets should  be the same as the length of the x’s and they are.  
+
+Now we can say `xb, yb =train_ds[0:5]` to pass in a slice.  
+Lets check that the shapes are correct, they are.
+And here they are the x’s and the y’s.  
+We've created a Dataset from  scratch. 
+
+We call get_model(), and now we've replaced our dataset line, it still runs. 
+When writing code is always make sure that the starting code works as we refactor. 
+We can see all the steps, so someone reading the code can then see why and how.
+ 
+DATALOADER
+So now we're going to replace these two lines of code  with this one line of code, using a DataLoader. 
+A DataLoader is going to have an iterator, i.e., a class that has a __iter__ method. 
+When we say “for in” in Python, behind the scenes, it's calling __iter__ to get a special object, 
+which it can then loop through using yield. 
+So it is basically getting a thing that we can iterate through using yield.
+A DataLoader has a Dataset and a batch size,  
+as we're going to go through the batches and grab one batch at a time.  
+We have to store away the Dataset and the batch  size.
+When we call the for loop, it's going to call __iter__. 
+We want to do exactly as we saw before, go through the range, and then yield that bit of the data set. 
+And that's a DataLoader. 
+
+We can now create a train a valid DataLoader from the train and valid Dataset.
+To get one thing out of an iterator, `iter` will also call `__iter__`. 
+`next` will grab just one value from it.
+We run it and confirm `xb` is a 50 by 784.
+To check what it looks like, let's grab the first element of our X batch, make it 28 by 28. 
+And there it is a DataLoader, we can grab our model and we can simplify 
+the `fit` function to just go for `xb,yb` in train_dl. 
+And it still works  the same way. 
+Now that it is nice and concise, we can start adding features to it.
+
+SAMPLER
+A feature we should add is that our training set, each time we go through 
+it should be in a different, randomized, order. 
+Instead of always going through these indexes in order, we want to use random indexes.
+We define a class `Sampler`.
+If we create a sampler without shuffle, without randomizing it,
+it's going to simply return all the numbers from zero up to n in order and it'll be an iterator. 
+But if `shuffle=True`, then it will randomly shuffle them. 
+Here is a sampler without shuffle. 
+We make an iterator from that and print a few things, it's just printing out the indexes.
+
+Or we can do exactly the same thing using islice. 
+We can grab the first five things from a sampler when it's not shuffled, just indexes.  
+When we add shuffle equals true, it's going to call `random.shuffle()`, 
+which just randomly permuts them. 
+And now we do the same  thing, we've got random indexes of the source data.  
+
+So why is that useful? 
+Lets create a BatchSampler, that is going to do the islice thing for us. 
+So we're going to say, pass in a sampler, something that generates indices and pass in a batch size. 
+We've  looked at chunking before. 
+It's going to chunk that iterator by that batch size.
+Now we can say please take our sampler and create batches of 4.
+And it's creating batches of four indices at a time. 
+Rather than looping through them in order, I  can now loop through this BatchSampler.
+
+Lets change our dataloader so that it's going to take some BatchSampler, and loop through the  BatchSampler. 
+That's going to give us indices.  
+And then we're going to get that Dataset item from that batch for everything in that batch.
+So that's going to give us a list. 
+And then we  have to stack all of the x’s and all of the y’s together into tensors. 
+For this we have the `collate` function, which is going to grab a batch, 
+pull out the x’s and y’s separately, and then stack them up into tensors.  
+
+Now we can create a training sampler, which is a batch sampler over the training set with shuffle=true.
+A validation sampler will be a batch sampler  over the validation set with shuffle=false.  
+And so then we can pass that  into this DataLoader class,
+the training data set and the training sampler and the collate function, 
+ 
+We do as before `xb, yb, next, iter`, and this time we use the valid DataLoader, check the shapes. 
+This is how PyTorch's DataLoader works, all the pieces they have. 
+They have  samplers, batch samplers, a collation function and  DataLoaders.
+Homework is experimenting with these carefully to see  exactly what each thing's taking in.
+
+Q: What does collate do? 
+Let's go through each of these steps. 
+We've got a batch sampler, so let's do just the valid sampler.
+We're going to go through each thing in the batch sampler. 
+Let's grab  one thing from the batch sampler. 
+The  output of the batch sampler will be next.
+Here is what the batch sampler contains, the first 50 digits, as this is our  validation sampler.
+If we did a training sampler, that would be randomized. 
+And what we then do is we go self.dataset[i] for i in b.  
+So let's copy that, and rather than self.dataset[i],  we'll just say valid_ds[i].  
+and o that's what we called it.  
+ 
+It created a list of tuples of tensors, let's have a look.  
+So p[0]. Okay is a tuple. It's got  the x and the y, independent variable. 
+So that's not what we want. 
+What we want is something that we can loop through, batches. 
+The collate function is going to take all of our x’s and y’s and collate them into two tensors, 
+one tensor of x’s and one tensor of y’s. 
+It does it first by calling zip(), a commonly used Python function, unrelated to the compression tool.
+Python's zip() function creates an iterator that will aggregate elements from two or more iterables. 
+We can use the resulting iterator to solve common programming problems, like creating dictionaries.
+`xs,ys = zip(*p)` lets us have all of the elements of each index together.
+Then we can stack those all up together and that gives us our y’s for our batch. 
+So that's  what collate does. 
+
+The collate function is used a lot in PyTorch, Hugging Face, etc.  
+It allows us to customize how the data that we get back from our Dataset, 
+so we put it together into something that the model can take as inputs? 
+Because that's really what we want  here. 
+
+fastcore has a shortcut for it, `store_attr`, store attributes. 
+If we put `store_attr` in `__init__`, we just need one line of code and it does the same  thing. 
+
+BREAK 
+
+MultiProcessing:
+We're going  to look at a multi-processing DataLoader.
+The PyTorch DataLoader works like this, but has a lot more code because it implements multi-processing,
+i.e., the code can be run in multiple processes in parallel for multiple items. 
+The dataloader, for example, may be opening up a JPEG, rotating it, flipping it, etc. 
+It could be doing a lot of work for each item in the  batch, so we'd want to do those all in parallel.  
+Python has a multi-processing library, but it doesn't work well with PyTorch tensors.
+PyTorch created a re-implementation of it, identical API, but works well with tensors. 
+This is not "cheating" because multi-processing is in the Python standard library,
+since this is API equivalent, we can use it.  
+
+When we call square brackets on a class, it's calling the `__getitem__` function on the object. 
+If we say, give me items 3, 6, 8, and 1,  it's the same as calling __getitem__ passing in 3, 6, 8, and 1.  
+We're going to use map, the other key piece pf "map-reduce".
+Map takes a sequence and calls a function on every element of that sequence. 
+So imagine we have a couple of batches of indices, 3 and 6 and 8 and  1. 
+Then we're going to call __getitem__  on each of those batches. 
+Map calls this function on every element of the sequence. 
+So its going to give us the same stuff, but now batched into two batches. 
+Multiprocessing has Pool where we can tell it how many workers we want to run, 
+how many processes you want to run.  
+And it then has a map which works just like the normal Python map, 
+but it runs this function in parallel over the items from this iterator.
+This is how we can create a multiprocessing  DataLoader. 
+
+So here we're creating our DataLoader.  
+We don't need to pass in the  collate function because we're using the default one.
+So if we say `n_workers=2` and then create that, if we say next, see how it's taking  a moment...
+It took a moment because it was firing off those two workers in the background.
+The first batch comes out more slowly.  
+We would use a multiprocessing DataLoader if this is doing a lot of work, we  want it to run in parallel. 
+Even though the first item might come out slower, 
+once those processes are fired up, it's  going to be faster to run. 
+
+This is a simplified multiprocessing DataLoader, PyTorch has more code to make it much more efficient. 
+But this is a good way of experimenting for building our own DataLoader to make things work.  
+Now that we've re-implemented it, let's just grab PyTorch’s DataLoader. 
+They don't have one thing called sampler that you pass shuffle to, instead 
+they have two separate classes, called SequentialSampler and RandomSampler.  
+That way is a little bit more work, but same idea. 
+And  they've got BatchSampler: The training sampler is a BatchSampler with a RandomSampler. 
+The validation sampler is a BatchSampler with a SequentialSampler.  
+Pass them in batch sizes. 
+And so we can now pass  those samplers to the PyTorch’s DataLoader. 
+And just like ours, it  also takes a collate function. 
+And it works, doing the same as ours with the same API.
+
+And it's got some shortcuts, as I'm  sure you've noticed when you've used DataLoaders.  
+So for example, calling batch sampler is going  to be very, very common. 
+So you can actually just  pass the batch size directly to a DataLoader, 
+and  it will then auto-create the batch samplers for you, so you don't have to pass in BatchSampler at  all. 
+Instead you can just say sampler, and it will  automatically wrap that in the batch sampler  for you. 
+Because it's so common to create  a RandomSampler or a SequentialSampler for a  Dataset, 
+you don't have to do that manually.  
+You can just pass in shuffle equals true or shuffle equals false to the DataLoader.
+
+The batch sampler and the collation function are things which are taking the result  
+of the sampler, looping through them,  and then collating them together.  
+Datasets know how to grab multiple indices at once, so we can just use the BatchSampler as a sampler. 
+We don't have to loop through them and collate them because they come pre-collated. 
+It is important to understand how we can pass a BatchSampler to sampler and what's it doing.
+Lets go back to our non-multi-processing pure Python code to see how that would work. 
+It's a nifty trick to grab multiple things at once and it can save time, make code faster. 
+
+VALIDATION SET
+Now lets add a validation set, just take our fit function, and this is the same code as before.  
+And then we're just going to add something  which goes through the validation set  
+and gets the predictions and sums up the losses  and accuracies and from time to time prints out  
+the loss and accuracy. 
+`get_dls()` will implement by using the PyTorch DataLoader now.
+The process is `get_dls()` passing in the training and validation dataset.
+Notice that for our validation DataLoader, we double the batch size,
+as it doesn't have to do backpropagation, it should use about half the memory, so we can use a bigger batch size.
+Get our model and then call this fit. 
+And now it's printing out the loss and accuracy on the validation set.  
+So finally we actually know how we're doing, which is that we're getting 97% accuracy on the whole validation set. 
+We've now implemented a proper, working, sensible training loop, 
+where every line of code is calling stuff that we have implemented.
+
+DATASETS
+Now we want to be able to grab interesting datasets.
+HuggingFace has a good library of datasets, let's use them datasets in notebook 05_datasets.ipynb.
+We need to pip install datasets, then `from datasets import`, for now just 2: `load_dataset, load_dataset_builder`. 
+
+Lets look at a dataset called Fashion-MNIST. 
+The HuggingFace hub has models and it has datasets.
+We just give them a name and you can then say, in this case,  
+load a dataset builder for Fashion-MNIST. 
+Now a  dataset builder is just basically something which  has some metadata about this dataset. 
+So the  dataset builder has a .info and the .info has a  .description. 
+And here's a description of this.  
+
+Like MNIST, it has 28x28 grayscale images, 10 categories, 60,000 training and 10,000 test examples. 
+It's a direct drop-in replacement for MNIST.  
+The dataset builder will tell us what's in this dataset, via dictionaries rather  than tuples.
+So there's going to be an image of type Image, and there's going to be a label of type ClassLabel.
+There's 10 classes and these are the names of the classes. 
+It also tells us if there are some recommended training test bits,  we can find out those as well. 
+So this is the size  of the training split and the number of examples.
+
+Now we can load the dataset using `load_dataset()` to download it and cache it.
+And it creates a dataset  dictionary. 
+A dataset dictionary is like what Fastai calls the datasets class. 
+HF calls it the DatasetDict class, and it contains a train and a test item, and those are  datasets. 
+These datasets are very much like the datasets that we created in the previous notebook.  
+
+We can now grab the training and test items from that dictionary and pop them into variables. 
+Lets have a look at the  0 index thing in training.
+As promised, it contains an image and a label.  
+We're not getting tuples anymore. 
+We're getting dictionaries containing the x and y, in this case, image and label.  
+To avoid writing image and label in strings all the time, we get them from .features and store them as x and y.
+As we iterate into a dictionary, you get back its keys.  
+
+We can now grab the from train zero, which we've already seen. 
+We can grab the x, i.e. the image, and there is the image.  
+We could grab the first five images  and the first five labels, for example.
+We know what the names of the classes are.
+So we could now see what these map to by grabbing those features. 
+
+Most libraries (including fastai) have something that works like  this. 
+There's something called int to string  `int2str`, which is going to take the labels and convert them to the classes names. 
+We call it on our y  batch, the first is ‘ankle boot’ and it is indeed, then a couple of t-shirts and a dress.
+
+So how do we use this to train a model?  
+The collate function is going to return a dictionary. (pretty common for Hugging Face stuff.)
+It goes through the Dataset for each one and stacks them up, all in one step.
+Then go through the batch, grab the ys and just stack them up with the  integers so we don't have to call stack.
+Now we're now going to have the image and label in the dictionary.   
+
+We create a DataLoader `dl` using that collation function,  and grab one batch. 
+`b[x].shape is a `[16,1,28,28]` , and the `y` labels of the batch are there.
+Notice that we haven't done any transforms.
+We're putting all the work directly in the collation  functions. 
+This is a nice way to "skip"  all abstractions of your framework, just do all of the work in the collate functions.
+So it's going to pass each item. 
+We're going to get the batch  directly, and go through each item.  
+Grab the `x` key from that dictionary, convert it to a tensor,
+do that for everything in the batch and then stack them all together. 
+This is a nice way to do things manually, without having to think too much about a framework.
+Particularly if we're doing custom stuff, this can be quite helpful.  
+
+Hugging Face datasets lets us avoid doing everything in a collate function.
+If we want  to create really simple applications, that's what we want, i.e., use a transform instead. 
+We define a function `transforms(b)` to take the batch `b`.
+It's going to replace the `x` in `b` with the tensor version of each of those PIL images.
+We are not stacking them, just returning that batch.
+Hugging Face datasets has `with_transform(f)`, to take the Hugging Face dataset, 
+and apply the `f` function to every element. 
+And it doesn't run now, behind the scenes, when it calls `__getitem__`, it will call function `f` on the fly. 
+`f` (eg `transforms`), can have data augmentation, can be random or whatever, 
+because it's going to be  re-run every time we grab an item, it's not cached.
+Other than that, this dataset has the same API as any other dataset, a length, `__getitem__`, 
+so we can pass it to a DataLoader. 
+PyTorch already knows how to collate dictionaries of  tensors. 
+So we've got a dictionary of tensors now, hence we don't need a `collate` function anymore.
+
+We can create a DataLoader from this, same as before, but without a collate function.  
+Hugging Face datasets expects the `with_transform` function to return the new version of the data.
+So I wanted to be able to write it like this, transform in place,   
+and just say the change I want to make and  have it automatically return that. 
+So if  I create this function, it's exactly the same  as the previous one, but doesn't have return.  
+How would I turn this into something  which does return the result?  
+
+INPLACE
+So here's an interesting trick. 
+We could take that function `_transformi`, pass it to another function `inplace` to  create a new function, `transformi`.
+`transformi` is the version of this inplace function that returns the  result. 
+The function `inplace` is a function generating function.
+`inplace` takes a function `A` and returns a function `B`, such that `B` calls `A` and then returns the result.
+It modifies an inplace function to become a function that returns the new version of that data. 
+`transformi` is the version that Hugging  Face will be able to use. 
+So we can now pass `transformi` to `with_transform()` and it does the same thing.
+
+This is common in Python, that the `transformi = inplace(_transform())` can be removed and replaced with a decorator.
+Given a function a decorator is syntactic sugar, i.e., we put `@` before a function. 
+And what it  says is take this whole function, pass it to this function and replace it with the result. 
+So this  is exactly the same as the combination of this and this. 
+We don't end up with the unnecessary intermediate underscore version, but the result is exactly the same. 
+And therefore  I can create a transformed Dataset by using this.  
+
+None of this is necessary, what we're doing is seeing the  pieces that we can put in place
+to make this stuff as simple as possible.
+
+Now we can make things pretty automatic by using `itemgetter()`, a function that returns a function.
+`itemgetter` creates a function `ig` that gets the `a` and `c` items from a dictionary (or something that looks like a dictionary). 
+`d` is a dictionary that contains keys a, b, and c. 
+`ig` will  take a dictionary and return the a and c values.  
+
+What looks like a dictionary?
+A dictionary looks like a dictionary.
+But Python doesn't care about what type things are, it only cares about what they look like. 
+When we call something  with square brackets, when we index into something, 
+behind the scenes it's just calling  `__getitem__`. 
+So we can create our own class, and its __getitem__, gets the key. 
+And it's just going to manually return 1 if `k=a` or 2 if `k=b` or 3 otherwise. 
+That class also works just fine with an itemgetter.  
+The reason this is interesting  is because a lot of 
+Many people write Python as if it was like C++ or Java, a statically typed language. 
+Python is an extremely dynamic language and it has a lot of flexibility.
+That's a little aside.  
+
+So what we can do is think about a batch for  example where we've got these two dictionaries.  
+PyTorch comes with a default collation function called `default_collate`,
+which takes the matching keys, grabs their values and stacks them together.  
+It also works on tuples, not  dictionaries, which is what most of you would have used before.
+
+We define `collate_dict(ds)`, which takes a Dataset `ds` and creates a `itemgetter` function for the features in `ds`,
+here  ‘image’ and ‘label’. 
+We're now going to return a function that is going to call our `itemgetter()` on ``default_collate(). 
+It's going to take a dictionary and collate it into a tuple  just like we did up here.
+So if we run that, we're going to call DataLoader on our transform dataset, passing in,
+a function that returns a function.  
+So it's a collation function for this Dataset and there it is. 
+Now this looks a lot like  what we had in our previous notebook. 
+This is not returning a dictionary, it's returning a tuple. 
+This is an important idea for working with Hugging Face datasets.
+They tend to do things with dictionaries, but most other things in the PyTorch world tend to work with tuples. 
+We can use this to convert anything that returns dictionaries into something that provides  tuples 
+by passing it as a collation function to your DataLoader. 
+
+TODO: inside collate_dict(ds) import pdb, pdb.set_trace(), 
+put breakpoints, step through, see exactly  what's happening.
+Also more importantly, set_trace inside the innermost `_f` function. 
+Put out b, list the code. And I could step into it. 
+Go inside the default_collate function, which is inside PyTorch, see exactly how that works. 
+Its code is going to look familiar because we've implemented all this. 
+  
+
+NBDEV
+Something useful we want to be able to use it in other notebooks.
+Rather than copying and pasting every time, lets have a Python module that contains this definition. 
+nbdev creates modules that we can use from notebooks. 
+It uses comment directives, which is #| (hash pipe) and then export. 
+We put it at the top of a cell to do something special, i.e., put this into a Python module.
+Export it to a Python module given at the top of the notebook, e.g., datasets. 
+At the end a line that says `import nbdev, nbdev.nbdev_export().`
+This is going to create a a Python library, e.g., datasets.py, and all that we exported. 
+`collate_dict`  will appear in the datasets.py 
+Now we can import collate_dict from datasets. 
+How does it know the name of the library/folder?
+There is a nbdev settings.ini file where you say what the name of your library is.
+We're going to use this as we start to implement stuff that didn't exist before. 
+Previously the we created already exists in PyTorch, so we use PyTorch’s. 
+Now we're starting to create stuff that doesn't exist anywhere, and we want to be able to use it again. 
+We're going to build a library called miniai, our framework, our version of something like fastai.
+Maybe it's something like what fastai 3 will end up being. 
+Once we start using miniai we will install it with "pip -e ."
+ 
+Plotting:
+We want to be able to visualize what a dataset looks like, lets talk about plotting.
+We are not allowed to use fastai's plotting library, we've got to learn how to do everything ourselves. 
+Here's the basic way to plot an image using matplotlib. 
+We can create a batch, grab the x part of it, grab the very first thing, and `imshow()` means show an image. 
+And there it is the ankle boot.  
+ 
+What can make this a bit easier?
+Let's define `show_image()`, which does `imshow()`, and a few extra things.   
+We will make sure that: (1) it's in the correct access order, (2) that's on the CPU,
+(3) If it's not a NumPy array, we'll convert it to a NumPy array.  
+We'll be able to pass in an existing axis, set a title if we want to.  
+And remove the ugly axis because we're showing an image, we don't want any of that.
+
+When we say help, the help shows what is implemented, and it also shows a lot more things.
+How did that happen? 
+We added **kwargs to the signature of the function.
+**kwargs says you can pass it as many or any other arguments  as you like that aren't listed. 
+And they'll all be put into a dictionary `kwargs`. 
+When we call `imshow()` we pass that entire dictionary (** here means “as separate arguments”).
+It knows what help to provide thanks to the delegates decorator of fastcore.
+  
+It checks where we're going to be passing the kwargs to, here to imshow(), 
+and then it automatically creates the documentation to show what kwargs can do.
+A helpful way of extending existing functions like imshow with all of their functionality and all of their documentation. 
+`delegates` is a very useful decorator in fastcore.
+
+We're going to export that, so now we can use  show_image() anytime we want.
+Matplotlib subplots are really helpful.  
+For example, if we want to plot two images next to each other.
+Matplotlib subplots creates multiple plots and you pass it number of rows and the number of columns, and it returns "axes". 
+What it calls "axes" are the individual plots.
+If we call show_image() on the first image, passing in axs[0],  it's going to get that here.
+Then we  call ax.imshow() to put the image on this subplot, which, unfortunately,they call it an "axis". 
+That's how we show an image on the first axis, and then a second image on the second axis.
+
+Lets add additional functionality to subplots, using `@delegates`. 
+We take `kwargs` and pass it through to  `subplots()`. 
+The goal is to automatically create an appropriate figure size, 
+and be able to add a title for the whole set of subplots.  
+
+It will automatically create documentation for the library. 
+So as you can see here, for the  stuff I've added, it's telling me exactly what  
+each of these parameters are, their type,  their defaults, and information about each one.  
+And that information is automatically coming from  these little comments. 
+We call these documents.  
+This is all automatic stuff done by fastcore and  nbdev. 
+
+The fastai library documentation always has  all this info.
+We don't have to call show_doc(), it automatically adds the documentation. 
+Just showing you here what it's going to end up looking like. 
+See that it's worked with delegates. 
+It's put all the extra stuff from delegates in here  as well. 
+And here they are all listed out here as well. 
+
+Subplots. 
+Let's create a 3 by 3 set of plots and we'll grab the first eight images. 
+Now we can go through each of the subplots. 
+It returns it as 3 lists of 3 items. 
+We flatten them all out into a single list.
+We'll go through each of those subplots and go through each image and show each image on each axis.
+This is a way to quickly  show them all.
+Still, it's a little bit ugly here, so we'll keep on adding more useful plotting functionality.
+So here's something that calls our subplots delegates to it.  
+But we're going to be able to say, for example, how many subplots do we want? 
+And it'll  automatically calculate the rows and the columns.  
+And it's going to remove the axes for any ones that we're not actually using. 
+So that's what get_grid()'s going to let us  do. 
+
+Finally, why don't we just create a single thing called  show_images() that's going to get our grid.
+And it's going to go through our images optionally  with a list of titles and show each one.  
+And we can use that here. You can see we have  successfully got all of our labeled images.  
+ 
+They were all exported to datasets.py, we've got get_grid(), subplots, show_images().
+At the very end we have this one line of code to run.   
+If we remove  miniai/datasets.py, we run this line of code and it's back, i.e., it's auto generated. 
+
+We are nearly at the point where we can build  our learner. 
+Once we've built our learner, we're going to be able to dive deep into training and studying models. 
+So we've kind of  got, nearly got all of our infrastructure in  place. 
+
+There are some computer science concepts we want to talk about, in 06_foundations.
+We are going to review some stuff in Python which we're going to use in the  next notebook. 
+We're going to be creating a learner class, a very general purpose training loop, 
+which we can get to do  anything that we want it to do. 
+To make it so we're going  to be creating "callbacks".
+
+CALLBACKS
+The most common place to see callbacks in software is for GUI events. 
+The main graphical user interface library in Jupyter Notebooks is called ipywidgets.
+We can create a widget like a button, and when we display it, it shows a button.
+And at the moment it doesn't  do anything if we click on it.
+We can  add an on_click() callback to it,  we're going to pass it a function,
+which is called when you click it. 
+w.on_click(f) is going to assign the f function to the on_click callback.
+Now if we click this it's doing it.
+
+A callback is a callable that we've provided. 
+A callable is a more general version of a function.
+Here it is a function that we provided that will be called back to when something happens.
+In this case, the something that's happening is that they're clicking a button.
+So this is how we are defining and using a callback as a GUI event.
+
+To create our own GUI for Jupyter, we can do it with ipywidgets using these callbacks.
+These particular kind of callbacks are called events, but it's just a callback.
+
+Let's create our own callback.
+Let's say we've got some very slow calculation, takes a very long time to add up the numbers zero to five squared 
+because we sleep for a second after each one.
+We run our slow calculations, takes a long time to return the answer. 
+Training a model is often a slow calculation.
+We would like to print out the loss from time to time or show a progress bar.
+For those kinds of things, we would define a callback that is called 
+at the end of each epoch or batch or every few seconds. 
+
+We can modify our slow calculation routine such that we can  optionally pass at a callback.
+All code is the same, except we've added one line of code that says, 
+if there's a callback, then call it and pass in where we're up to. 
+So  then we could create our callback function. 
+So this is just like we created a full callback  function f(), let's create a show_progress()   callback function. 
+That's going to tell us how far  we've got. So now if we call show slow calculation  
+passing in our callback, you can see it's going  to call this function at the end of each step.  
+So here we've created our own callback. 
+
+There's nothing special about a callback, it doesn't require its own syntax.
+It's just passing in a function, which some other function will call at particular times,
+e.g., at the end of a step or when you click a button. 
+We don't have to define the calllback function ahead of time.
+We can define the function at the same time that we call the slow calculation by using Lambda.
+Lambda just defines a function, but it doesn't give it a name. 
+So here's a  function that takes one parameter and prints out exactly the same thing as before. 
+So here's  the same way as doing it, but using a Lambda.  
+We could make it more sophisticated, and rather than always saying,  “Awesome! We finished epoch…”, 
+we could have let you pass in an exclamation and we print that out.
+And so in this case, we could now have our Lambda call that function.  
+We can now create a function that returns a function.  
+And so we could create a make_show_progress  function where you pass in the exclamation.  
+We could then create, and there's no need to give it a name actually, it's just return it directly.  
+We can return a function that  calls that exclamation. 
+
+So here we  are passing in nice. 
+And that's exactly the same  as doing something like what we've done before.  
+We could say, instead of using a Lambda,  we can create an inner function like this.  
+So here's now a function that returns a function and does the same thing.
+One way with the Lambda, one way without lambda.
+We can do the same thing using partial as the make_show_progress().  
+It's going to call show_progress() and  pass, "OK I guess". 
+So this is again,  an example of a function returning a function.  
+We use partial a lot, its worth spending  time practicing. 
+
+Python doesn't care about types in particular.  
+No requirement that cb be a function, just has to  be a callable, something that you  can call. 
+Another way of creating a callable is defining __call__.  
+Below is a class that works the same as `make_show_progress()`. 
+`__init__` stores the exclamation and a __call__, the prints. 
+Now we created a callable object that does the same thing.  
+
+We need to be comfortable with these concepts: __call__, dunder things in general, partials, classes. 
+They come up a lot in all frameworks.  
+
+ARGS and KWARGS
+Lets look at how *args and **kwargs work. 
+We define a function that has *args and **kwargs, nothing else, and have it print them.  
+We call the function passing 3, “a”, and thing1=”hello”. 
+3 and "a" are by position, there is no "=".
+Arguments that are passed by position are placed in *args, (if there is one).
+It doesn't have to be called args, can be called anything in the "*" star bit.
+`args` is a tuple  containing the positionally passed arguments.
+`kwargs` is a dictionary containing the named arguments. 
+That is all that *args and **kwargs do.
+Nothing special about their names. 
+
+On the other hand, let's say we had  a function which takes a couple of,  
+let's try that, print a, actually,  we'll just print them directly a, b, c.
+We can also, rather than just using them as  parameters, we can also use them when calling something. 
+So let's say I create something called  args which contains [1, 2]. 
+And I create  something called kwags that contains a dictionary  containing {‘c’: 3}. 
+I can then call g()  and I can pass in *args comma **kwargs.  
+And that's going to take this 1, 2,  and pass them as individual arguments, positionally. 
+And it's going to take the {‘c’:  3} and pass that as a named argument, c equals 3.  
+So there are two  linked but different ways that use * and **.  
+
+Now a different way of doing callbacks.
+We are passing a callback that's not callable, but it is a class containing 
+a `before_calc` and an `after_calc` method.  
+We run that and is printing before and after every step by calling before_calc() and  after_calc(). 
+So callback actually doesn't have to be a function, it can be something that contains methods. 
+
+So we can have a version that is going to pass in to `after_calc()`, 
+both  the epoch number and the value it's up to.
+By using `*args` and `**kwags`, we can safely ignore them if we don't want them.  
+It's just going to chew them up and not complain. 
+If we didn't have those it won't work, it would complain.
+A good use of `*args` and `**kwags`  is to eat up arguments we don't want.  
+
+Or we could use the arguments, epoch and val and print them out.
+This callback is giving us status as we go. 
+Skip this bit because we don't really care about that. 
+
+DUNDER
+Let's review the idea of dunder. 
+Anything that  looks like this, underscore underscore something  underscore underscore something is special. 
+And it could be that Python or Pytorch or Numpy has to find that special thing called dunder methods.
+Some of them are defined as part of the Python data model.
+And so if you go to the Python documentation, it'll tell you about these various different— 
+here's __repr__, and __init__ that we used earlier. They're all here. 
+PyTorch has some of its own, and NumPy has some of its own. 
+If Python sees plus (+), what it actually does is it calls dunder add. 
+Lets create something that's not good at adding things, it always adds 0.01 to it.
+SloppyAdder(1) + SloppyAdder(2)  equals 3.01. 
+“+” here is actually calling `__add__`. 
+We need to be familiar with these 11 methods, as we will use them in the course. 
+
+GETATTR 
+We've seen setattr already, getattr is just the opposite.
+Here's a class with two attributes, a and b, that are set to 1 and 2. 
+We create an object of that class a.b equals 2, because we set b to 2. 
+When we say a.b, that's just syntax sugar basically, in Python. 
+What it's calling behind the scenes is getattr on the object. 
+And so this  one here is the same as getattr(a, ‘b’).
+This can be fun/crazy because we can call getattr a, and then either ‘b’ or ‘a’ randomly.
+Python is a dynamic language, we can even set it up so we don't know what attributes are going to be called.
+
+getattr, behind the scenes calls __getattr__. 
+By default, it will use the version in the object base  class. 
+So here's something just like a, it's got a and b defined, but also got __getattr__  defined. 
+__getattr__ is only called for stuff that hasn't been defined yet, 
+and it'll  pass in the key or the name of the attribute.  
+Generally speaking, if the first character is an underscore, it's going to be private or special. 
+So we raise an  attribute error. 
+Otherwise we "steal it" and return f‘Hello from {k}’. 
+`b.a` is defined, returns 1. 
+b.foo is not defined, so it calls `__getattra__` and we get back hello from foo. 
+This gets used a lot to make it more convenient to access things. 
+
+We got a nicely optimized training loop, understand what DataLoaders and Datasets do, got an optimizer. 
+We've  been playing with Hugging Face datasets, and got those working smoothly. 
+We are in a good position to write our generic learner training loop 
+and then we can start building and experimenting with lots of models. 

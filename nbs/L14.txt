@@ -1,7 +1,7 @@
 Lesson 14
 
 In L13 we covered how we implement the chain rule in neural network training with backpropagation. 
-Kaushik Sinha has produced a very nice explanation of the code that we looked at last time and I've linked  to it. 
+Kaushik Sinha wrote a nice explanation of the code that we looked at last time and I've linked  to it. 
 So it's got the math and then the code.  
 The code's slightly different to what I had, some minor changes.
 So you'll find that in the Lesson 13  resources. 
@@ -806,9 +806,8 @@ DUNDER
 Let's review the idea of dunder. 
 Anything that  looks like this, underscore underscore something  underscore underscore something is special. 
 And it could be that Python or Pytorch or Numpy has to find that special thing called dunder methods.
-Some of them are defined as part of the Python data model.
-And so if you go to the Python documentation, it'll tell you about these various different— 
-here's __repr__, and __init__ that we used earlier. They're all here. 
+Some of them are defined as part of the Python data model documentation.
+
 PyTorch has some of its own, and NumPy has some of its own. 
 If Python sees plus (+), what it actually does is it calls dunder add. 
 Lets create something that's not good at adding things, it always adds 0.01 to it.
@@ -827,7 +826,7 @@ This can be fun/crazy because we can call getattr a, and then either ‘b’ or 
 Python is a dynamic language, we can even set it up so we don't know what attributes are going to be called.
 
 getattr, behind the scenes calls __getattr__. 
-By default, it will use the version in the object base  class. 
+By default, it will use the version in the object base class. 
 So here's something just like a, it's got a and b defined, but also got __getattr__  defined. 
 __getattr__ is only called for stuff that hasn't been defined yet, 
 and it'll  pass in the key or the name of the attribute.  

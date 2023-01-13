@@ -3,20 +3,16 @@ We're going to create a convolutional autoencoder,
 and in the process we will see why it is a tricky thing.
 We will begin to work on a deep learning framework.
 
-Before we can create a convolutional autoencoder we need to
-talk about convolutions, what are they and what are they for.
-Convolutions allow us to tell our neural network a little bit 
-about the structure of the problem. 
-That's going to make it a lot easier for it to solve the problem.
+Convolutions allow us to tell a neural network a little bit about the structure of the problem,
+making it easier for it to solve the problem.
 We're doing things with images, laid out on a 2D grid for black and white 
 or a 3D for color or a 4D for a color video.
-There is a relationship between the pixels going across and the pixels going down.
-They tend to be similar to each other.
+There is a relationship between the pixels going across and the pixels going down,
+they tend to be similar to each other.
 Differences in those pixels across those dimensions tend to have meaning.
 Sets patterns of pixels that appear in different places often represent the same thing.
 For example a cat in the top left is still a cat even if it's in the bottom right.
-These kinds of Prior information is something that is naturally captured 
-by a convolutional neural network. 
+Such prior information is naturally captured by a convolutional neural network. 
 Something that uses convolutions will be able to use less parameters and less computation 
 because more of that information about the problem is encoded directly into our architecture.
 
@@ -25,17 +21,16 @@ such as a multi-layer perceptron or a Transformers Network.
 Those kinds of architectures could potentially give us more flexibility.
 Given enough time compute and data they could potentially find things 
 that maybe CNNs would struggle to find.
-We are not always going to use CNNS but they're a good starting point and important to understand.
-They're not just used for images.
-We can also take advantage of one-dimensional convolutions for language-based tasks for instance.
+We are not always going to use CNNs, but they're a good starting point.
+They're not only used for images, for example, 
+one-dimensional convolutions are used for language-based tasks.
 
 In this notebook we are importing stuff from miniAI, 
 a little library that we're creating using nbdev:
- 
 from miniai.datasets import *
 from miniai.conv import *
 
-The datasets notebook starts with an export directive that says that 
+The notebook starts with an export directive that says that 
 the default export module is called datasets.
 Some of the cells have an export directive on them. 
 At the very bottom of the notebook we have nbdev.nbdev_export() 
@@ -49,9 +44,9 @@ But we can install a local directory as a python module, using pip install -e (s
 and that sets the (e.g., current) directory as a Python module. 
 That's going to install the directory as a library and then we can import things from that library.
 
-We're going to grab the mnist dataset and create a convolutional neural network (CNN).
+We're going to get the MNIST dataset and create a convolutional neural network (CNN).
 What are convolutions?
-Matt Kleinsmith wrote a medium article on CNN's from different viewpoints. 
+Matt Kleinsmith wrote a medium article on CNNs from different viewpoints. 
 Say that this is a 3x3 image with 9 pixels labeled from A to J.
 A convolution uses a kernel, (just another tensor), in this case it's a 2x2 Matrix.
 We call Alpha Beta Gamma Delta the 4 values in this convolution kernel.
@@ -62,7 +57,7 @@ The output of the 2x2 overlay would be P in the top left of a 2x2 output.
 Next slide the kernel to the top right of the 2x2 output,
 and apply each of our coefficients to these respectively colored squares.
 And then dito over the bottom left and then over the bottom right.
-We end up with this equation:
+We end up with equations for P, Q, R and S:
 P = Alpha * A + beta * B + gamma * D + Delta * E + Bias
 Q= , R= , S= ...
 We're repeately multiplying them together and adding them up.
@@ -71,44 +66,37 @@ This is called a convolution.
 
 Let's create a convolution, grab our training images, take a look at one, 
 and let's create a 3x3 kernel, which is a Rank-2 tensor.
+We could draw what looks like a bunch of lines. (??)
 
-In the 3X3 Matrix rank two tensor and we could draw what that looks like
-not surprisingly just looks like a bunch of lines 
-
-What would happen if we slide this over just these nine pixels
-over this 28 x 28 well what's going to happen is if we've
+What happens if we slide this over just these nine pixels
+over this 28x28 well what's going to happen is if we've
 got some the top left for example 3x3 section as these names then
 we're going to end up with negative A1 because the top three are all negative 
 negative A1 minus A2 minus A3 then X to just zero so that won't do anything and 
 then plus A7 plus A8 plus a 9.
-why is that interesting? 
+Why is that interesting? 
 
-Let's grab just the first 13 rows and first 23 columns of our image,
-and use Gray conditional formatting.
-
+Let's grab just the first 13 rows and first 23 columns of our image, and use Gray conditional formatting.
 If we take rows 3, 4 and 5 columns 14 15 16, and we multiply it by this kernel it gives us a
 fairly large positive value.
 This is a DOT product, an element-wise multiplication followed by a sum.
 This is going to find the top Edge, this one is a top Edge, bottom Edge, etc.
 
 We would like to apply this kernel to every single 3x3 section.
-The apply kernel function takes some particular row and some particular column and some particular
-tensor as a kernel and does that multiplication dot sum 
-for example we could replicate
-this one by calling apply kernel and this here is the center of that three by
-three grid area and so there's that same number 2.97
+The apply kernel function takes a particular row and column and a particular
+tensor as a kernel and does that multiplication dot sum.
+For example, we could replicate this one by calling apply kernel and this here is the center of that 3x3
+grid area and so there's that same number 2.97.
 
 Now we could apply that kernel to every one of the 3x3 windows in this 28x28 image.
 We're going to be sliding over like this red bit sliding over here but we've
 actually got a 28x28 input not just a 5x5 input.
-so to get all of the coordinates let's just simplify it to do this 5x5.
-we can create a list comprehension we can take i through
-every value in range five and then for each of those we can take j for every value in range 5.
+Let's just simplify it to do this 5x5.
+We create a list comprehension and take i through every value in range(5) 
+and then for each of those we can take j for every value in range(5).
 
-If we just look at that Tuple you can see we get a list of lists containing all of those coordinates
-so this is a list comprehension in a list comprehension, a
-really helpful idiom and I certainly recommend getting used to it.
-
+If we just look at that tuple we get a list of lists containing all of those coordinates.
+It is a list comprehension in a list comprehension, a really helpful idiom.
 Now we're going to call apply_kernel for each of those, so if we go through
 from 1 to 26 and then for each of those go through from 1 to 26 again and call apply_kernel.
 That's going to give us the result of applying that convolutional kernel to
@@ -120,17 +108,17 @@ which looks as a rotated version of the top Edge tensor.
 
 If we apply the left Edge kernel we're going to pass in the left Edge tensor for the same
 list comprehension in a list comprehension and this time we're getting 
-highlighting all of the left edges in the digit 
+highlighting all of the left edges in the digit.
 
 A 2x2 can be looped over an image creating these outputs. 
 In the process of doing so we are losing the outermost pixels of our image.
 we'll learn about how to fix that later.
 but just for now notice that the as we are putting our 3x3
-through for example in this 5x5 if there's only one two three places that we can put it going across not five places because we need some kind of edge. 
+through for example in this 5x5 if there's only one two three places that 
+we can put it going across not five places because we need some kind of edge. 
 
-From the Xyler and Fergus pictures from from lesson one we can
-recognize that the kind of first layer of a CNN is often looking for kind of edges and
-gradients, etc. 
+From the Xyler and Fergus pictures from lesson 1 we can recognize that 
+the first layer of a CNN is often looking for kind of edges and gradients, etc. 
 This is how it does it. and then convolutions on top of
 convolutions with non-linear activations between them can combine those into
 curves or corners, etc.
@@ -142,7 +130,7 @@ In the paper they describe it.
 say you are putting this 2x2 um kernel over this 3x3 bit of an image.
 This window needs to match to this bit of this window.
 
-[We can unwrap this to a one one two two uh sorry one two one two downwards
+[We can unwrap this to a one two one two downwards
 to here one two one two to unroll it like so and you could unroll the kernel
 here um yeah sorry this is one two one one so
 this is bit is here one two one one and then 
@@ -317,7 +305,7 @@ We have 1 input channel, 4 output channels, and a 3×3 kernel.
 We've actually had a bit of a win here which is that 
 the number of parameters in our CNN is pretty
 small by comparison to the number in the MLP version.
-The number of parameters is equal to the size of this Matrix, M times n h
+The number of parameters is equal to the size of this Matrix, M times nh
 
 Plus the number in this which will be NH times 10.
 at some point we probably should  create something that
@@ -428,24 +416,20 @@ Playing around with excel's precedent arrows I think is a nice way to say that.
 BREAK
 We look now at the autoencoder Notebook.
 We import the usual stuff and we've got one more of our own modules to import.
-We are going to switch to a different dataset, the fashion MNS dataset.
-We can take advantage of the stuff that we did in 05datasets 
-and the huggingface stuff to load it.
+We switch to a different dataset, the fashion MNIST dataset.
+We can take advantage of the stuff that we did in 05datasets and the huggingface stuff to load it.
 We never actually built any models with it so let's first of all do that.
 
-We convert each image into a tensor and that's going to be an @inplace transform 
-this decorator.
-We can call data set dictionary with transform 
-and here we have our example of a sneaker.
+We convert each image into a tensor and that's going to be an @inplace transform this decorator.
+We can call data set dictionary with transform and here we have our example of a sneaker.
 
 We will create a collation function.
 we're collating the dictionary for that dataset 
 ((we built that in the datasets notebook))
 
-and let's actually make our collate function something that does
+Let's actually make our collate function something that does
 to device which we wrote in our in our last notebook 
-and we'll get a little data loaders
-function here which is going to go through each item in the data set dictionary
+and we'll get a little dataloader function here which is going to go through each item in the data set dictionary
 and create a data loader for it and give us a dictionary of data loaders
 
 dataload of a training and a dataloader for validation, 
@@ -515,8 +499,7 @@ There is something called a transposed convolution
 a stride one-half convolution]
 
 But there is a really simple way to do this: 
-let's say we've got a 3x3 pixels, we could make that into a 6x6 by 
-copying each pixel into 4 pixels, 
+let's say we've got a 3x3 pixels, we could make that into a 6x6 by copying each pixel into 4 pixels, 
 simply turning each pixel into four pixels, nearest neighbor up sampling.
 It is not a convolution, it is just copying, but then we
 could apply a stride-1 convolution and that would double the grid size 
@@ -618,13 +601,11 @@ class DataLoaders:
     def from_dd(cls, dd, batch_size, as_tuple=True):
         return cls(*[DataLoader(ds, batch_size, num_workers=6, collate_fn=collate_dict(ds)) for ds in dd.values()])
         
-If you haven't seen @classmethod before it's what allows us to say 
-Dataloaders.something.
-In order to construct this we could have put this in init() 
+If you haven't seen @classmethod before it's what allows us to say Dataloaders.something.
+In order to construct this we could have put this in __init__ 
 but we'll be building more complex data loaders things later so I thought we
 might start by getting the basic structure right.
 This is all pretty much the same as what we've had before.
-
 I'm not doing anything on the device here because as we know that didn't really work.
 We're going to use to_device.
 

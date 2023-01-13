@@ -15,12 +15,14 @@ Also it is good because we don't generally want to have the learner has a refere
 also the callbacks having a reference back to the learner.
 That created a cycle.
 
+[Lesson 18: 51:07
 A few other little changes we've made to the code. 
 To find quickly all of the changes that we've made to the code in the last week.
-We go to the course repo, on any repo, we can add /compare in GitHub,  
+We go to the course repo, on any repo, we can add /compare to the end of the URL in GitHub,  
 and then we can compare across different things.
 One of the examples is to compare across different times, e.g., 
 look at the master Branch now versus one day ago.
+https://github.com/fastai/course22p2/compare/master%40%7B1day%7D...master
 We can change versus seven days ago so just change in the URL to 7, and there are all the commits.
 We can see the changes from last week, for example, all the self.learns became learns.
 

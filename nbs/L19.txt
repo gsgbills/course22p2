@@ -1,0 +1,521 @@
+Lesson 19 Jeremy Howard with guests tanishq and Jonno.
+Challenge
+Christopher Thomas on the Forum came up with a a better result for the fashion MNIST challenge using dropout.
+We are tracking the results on a forum thread.
+Pieter on the Forum noticed a bug in in the code for resnets:
+In the Resblock I was not passing along the batchNorm parameter
+and so all the results were without Batchnorm. 
+After fixing thid batchnorm and adding Dropout we got better results.
+Then Christopher came up with a better Dropout and got better results still for 50 epochs.
+(The bug is already fixed in the repo) 
+
+Dropout
+Dropout is when we randomly "delete" some activations, i.e., we change them to zero.
+A simple way to do this is to create a binomial distribution object, `dist`
+where the probabilities are `1-p`, and then sample from it.
+That will give us a probability in this case, e.g., one zero in the sample out of the 10 samples.
+If we take a tensor and multiply it by our activations it will set about a tenth of them to zero. 
+
+Lets define a Dropout class, we pass it what probability of Dropout, it stores it.
+We do dropout only during training time, at evaluation time we're not going to randomly delete activations.
+During training time we create `dist`, a binomial distribution object.
+We pass in the `1-p` probability and then say how many binomial trials do we want to run, 
+how many coin tosses each time, and it's just `1.0`.
+A cool trick is to put that 1.0 onto our accelerator (GPU or MPS) (to(x.device))
+to create a binomial distribution that runs on the GPU.
+If we take a sample of the same size as the input, 
+then that is a bunch of ones and zeros and a tensor the same size as the activations.
+Another trick is going to result in activations that are on average about one tenth smaller.
+If we multiply by 1 over 1 - 0.9, then that's going to scale up to undo that difference.
+In evaluation mode it's just going to return the original.
+If p=0 they are all 1s, multiply and divide by 1, nothing to change.
+A common place to add Dropout is before the last linear layer.
+
+Running the exact same epochs gives a slight improvement.
+The reason for the improvement is that it is not able to memorize the data or the activations.
+A little bit of randomness forces it to try to identify the underlying differences.
+
+There are different ways of thinking about Dropout.
+For example, it's almost bagging like a Random Forest that each time is given a slightly different subset.
+JH added a drop to D layer right at the start.
+This is not common, just showing it.
+Christopher Thomas's idea traind well although he didn't use Dropout2d.
+
+Dropout2D rather than using x.size as our tensor of ones and zeros,
+potentially dropping out every single batch, every single Channel, every single X Y independently.
+Instead we want to drop out an entire grid area, all the channels together,
+so if any of them are zero then they're all zero.
+
+TODO: Look up the docs for Dropout2d (https://pytorch.org/docs/stable/generated/torch.nn.Dropout2d.html)
+for more details.
+TODO: implement Dropout2D from scratch and come up with a way to test it, ie
+to check that it's working correctly because it's easy to think that it is working and then realize it's not.
+
+Christopher Thomas, first to break 95%, found that if you remove this entirely and only keep this,
+then you end up with a better results for 50 epochs.
+The standard is to remove Dropout before we do inference.
+But does it work to use it for test time augmentation (TTA)?
+JH wrote a callback for that TTA dropout.
+Before_epoch if you're a member in learner we put it into training mode
+which puts every individual layer into training mode.
+Hence for the module itself we can check whether the module is in training mode.
+After that's happened we can then go back in this callback and apply
+a Lambda that says if this is a dropout then put it in training mode all the time, including in evaluation.
+Then we can run it multiple times just like did for TTA but with this callback now.
+
+It is unlikely to give us a better result because it's not showing different versions like TTA does.
+Those versions are meant to be the same thing.
+Dropout gives a sense of how confident it is.
+If it has no idea then that little bit of dropouts often leads to different predictions.
+Is a way of doing a confidence measure that we have to calibrate.
+By looking at things that it should be (or not be) confident about,
+and seeing how the test time dropout changes.
+This idea has been used in medical models, but it's not popular.
+It could be used and should be studied more.
+A lot of stuff used in the medical world is less well known outside of it. 
+
+DDPM
+DDPM from scratch (or at least everything except the model)
+DDPM doesn't have the latent vae.
+We're not going to do conditional, so we're not going to get to tell it what to draw.
+The Unet model itself we're going to do next lesson.
+
+Tanishq:
+
+Lets use the miniai framework to build more sophisticated models, e.g., a diffusion model from scratch.
+And will see how the equations in the papers correspond to the code.
+We use 015_DDPM.ipynb and the paper "denoising diffusion probabilistic models" from 2020.
+This was one of the papers that set off the trend of diffusion models and it's a good starting point.
+There were different approaches/techniques before diffusion models, e.g., GAN, VAEs, etc.
+The paper was published by a group in UC Berkeley, (a few of them work at Google).
+Diffusion models were introduced in 2015 but this 2020 paper 
+simplified the models and made it a lot easier to work with.
+They trained on both faces and CIFAR10.
+
+JH: Perhaps the "diffusion" part of diffusion models is not actually all that everybody's been talking about.
+This week a new paper "Muse: Text-to-Image Generation via Masked Generative Transformers" 
+appears to be better than Stable Diffusion and it doesn't use diffusion.
+The basic ideas covered today will still adhere but details will be different.
+We need a better term for modern generative models... not "diffusion", perhaps "iterative refinement" . 
+
+The idea is that given a dataset with data points, e.g., images of dogs,
+we want to produce more data points that are "similar" (dogs) to what we're given.
+Given an image x, P(x) is the probability that we would see that image "in real life".
+
+Lets look at a simpler dataset example, x is a person height, 
+y is the probability that a given person will have that height.
+The data distribution for human height is a bell curve, with a mean of 5'9".
+We can use P(x) to sample values.
+The x-axis is the height and the y-axis is the probability of some random person being that tall.
+Around the "peak" there is a higher probability, the values that we would see more often.
+For a game with human characters we want to randomly generate a height for a human character.
+But we wouldn't want to select a random height between 3' and 7' that is uniformly distributed.
+We would want to have the height dependent on a function F that is more likely to
+sample values around the middle, and less likely sample extreme points.
+The function F is dependent on P(x).
+Adding some information about P(x) will allow us to sample more data points.
+The goal of generative modeling is to get some information about P(x) that
+allows us to sample new points, and create new ones.
+
+Figure 2 in "Denoising Diffusion Probabilistic Models", shows a diffusion model 
+as a directed graphical model.
+X0 is an image that we want to generate, and we start with Pure Noise XT.
+[From the Paper]
+A diffusion probabilistic model is a parameterized Markov chain trained using variational inference 
+to produce samples matching the data after finite time. 
+Transitions of this chain are learned to reverse a diffusion process, 
+which is a Markov chain that gradually adds noise to the data in the opposite direction of sampling 
+until signal is destroyed.
+]
+There are 2 processes: 
+Forward is simple, goes from the target image adding noise, 
+and reverse is hard goes from XT to our image, creating samples.
+We do these in multiple steps from timestep 0.
+The transition kernel tells us how to go from a less noisy image to a more noisy image.
+
+Let's look at the equations from the paper: 
+The forward direction is to make an image more noisy we just add more noise to it.
+The reverse direction is difficult. 
+From the far left to the far right is impossible because none of that person's face exists anymore.
+But somewhere in between we can go from something that's partially noisy to less noisy by a learned model.
+
+Beta is one of the important variables that describes the diffusion process. 
+Beta(t), the variance, increases as t increases:  beta(t) > beta(t-1).
+Then we have sqrt(1-beta(t)) and multiply it by x(t)-1.
+So as t is increasing this term (the mean) decreases, and we get less of the original image.
+Because the original image is going to be part of x(t-1).
+As the timestep t increases we get less contribution from x(t-1), 
+the mean is going towards zero, while the variance keeps increasing.
+We lose contribution from the original image as timestep increases.
+The iterative process keeps adding noise and that leads to the image 
+being "PureNoise" at the end of the process, X(T).
+
+JH: Its useful to consider one extreme, at X(1) the mean is going to be (1-beta(t)) * X(0). 
+X(0) is the original image and (1-beta(t)) will be close to one, so at X(1)
+the mean is very close to the image and the variance will be very small.
+Hence we have an image that just has a tiny bit of noise.
+
+Sometimes is easier to write out Q(X(t)) directly because these are all independent.
+Q(X(t)) is only dependent of X(t-1) which is only dependent on X(t-2).
+Each of these x(t-i) steps are independent.
+So based on the laws of probabilities we can get Q(x(t)) in close form.
+
+[Tanishq]
+
+Alphabar(T) is dependent on beta(t) like one minus the cumulative......(we'll see the code)
+Alphabar(t) keeps decreasing as timestep t increases and (1 - alphabar(t) is increasing as t increases. 
+The contribution from the original image decreases as t increases while the noise is increasing.
+
+The reverse process is a neural network and this is also a neural network 
+that we learned during the training of the model.
+This paper simplified by completely ignoring the last SIGMA, 
+setting it to just a constant dependent on beta(t).
+Hence we only have one ANN to train, which is referring to this mean.
+
+This diffusion model process parameters are in an easier form, with a simplified training objective.
+The loss function is just MSE and we have an Epsilon theta function that
+looks complicated in the paper but in Python code it'll be simple.
+
+XYZZZ is equivalent to this equation here, saying that X(t) in a different way.
+Epsilon is a normal distribution with a mean of zero and a variance of one.
+And there are scaling terms that change the mean to be the same as this equation over here.
+Epsilon is the noise that we're adding to an image to make it a noisy image.
+The ANN is a noise predictor, predicting the noise in an image.
+If the distribution of data in a 2D space,
+each data point represents an image and they're in a "blob" area which represents a distribution.
+If we sample a random data point it is most likely be noisy images.
+
+We use the iterative process of a diffusion model to keep adjusting the data point 
+and make it look more like an image from that distribution.
+We have the image, we add noise to it, then an ANN predicts the noise and subtracts it out,
+we're going back towards the distribution.
+Adding the noise takes us away from the distribution,
+and predicting the noise brings us back to the distribution.
+If we know for a point how much noise to remove, 
+that tells us how to keep going towards a point that lies within the distribution.
+Noise prediction is to do an iterative process starting at a random point, e.g., Pure Noise,
+and keep predicting and removing that noise, approaching the data distribution.
+
+CODE:
+Imports and load the dataset fashion MNIST.
+The model is going to take the previous noisy image and predict the noise.
+The shapes of the input and the output are the same: an image shape.
+We use a U-net which takes in an input image.
+Gray arrows going from left to right are like resnet skip connections, but used in a in a different way.
+ANN output is the same or similar size to the input, and therefore we can use it to learn 
+how to go from one image to a different image.
+
+We import `UNet2DModel` from the diffusers library.
+We are temporarily cheating because we're using something we haven't yet written from scratch.
+We're working with one channel images, `in_channels=1`, 
+then number of channels of the different blocks are specified.
+
+Let's go into the training process, and train with an MSE loss.
+We select a random timestep and then we add noise to our image based on that timestep.
+If we have a very high (low) timestep we're adding a lot (little) noise.
+
+We're going to: 
+1. randomly choose a Timestep, 
+2. add the noise accordingly to the image 
+3. we pass it the noisy image and timestep to the  model. 
+4. predict the amount of noise that was in the image with the MSE loss.
+
+JH has a better description / implementation in notebook 17_DDPM_v2.ipynb.
+JH draws pictures to understand better, copied and pasted, 
+replaced the Greek letters with English versions, and plotted them to see what they look like.
+Beta is linenspace, a line, there's going to be a thousand `t` points equally spaced from 0.01 to 0.02.
+Sigma is the square root of beta, and there is going to look like.
+Alphabar is the "cumulative product" `cumprod` of 1 minus beta.
+There's what Alphabar looks like.
+
+GREEK LETTERS
+You first wrote out the Greek letters in English Alpha, and beta, etc.
+Was difficult to read as they were going off the edge of the page.
+So we replaced it with Greek letters so it is easier to read  and see it all at once.
+When we need to edit the code just copy and paste the Greek letters.
+We used the word beta in the __init__ parameter list so that somebody using this 
+never has to type a Greek letter.
+Because we're looking back and forth between the paper and the implementation it works fine.
+
+We're using the Greek letters used in the paper.
+When t is higher (t is in the x-axis) beta is higher and Alphabar is lower.
+Beta, Sigma, and Alphabar each has 1000 t points.
+Beta is the amount of variance added at each step. 
+Sigma is the square root of Beta, the standard deviation.
+As we add noise to something repeatedely, you have to multiply together or that amount of noise to say
+how much noise you would get.
+
+The Callback is going to be used to set up the data.
+The models got the data that we're trying to get to learn to denoise.
+
+In __init__ we define all these variables.
+In before_batch we set up our batch to pass into the model.
+The model is taking in the noisy image and the timestep.
+The target is Epsilon, the amount of noise that we are adding to the image.
+We generate that noise so Epsilon is that Target, and it is the amount of additional noise that we're adding.
+The model is predicting the noise in the image, 
+our target is the noise that we're adding to the image during training.
+We have Epsilon generated with `randn` with a mean of zero, variance of one,
+adding the appropriate shape and device.
+
+The batch that we get originally will contain the clean original images from the dataset, is x0.
+Then we add noise so we have our Alphabar and we have a random timestep that we select.
+There's a section in the paper that has the nice algorithm 1 Training.
+We select a clean image from the dataset, take a random timestep between the range {1,..,T}.
+Get an Epsilon value.
+Then we have the equation for x(t), same equation as in the code for xt.
+We need to pass into our model xt and t accordingly and also the Target, which is Epsilon.
+The same is shown in Algorithm 1 in the paper, where the model is represented as Epsilon-Theta.
+Theta is often used to represent a neural network with some parameters.
+Epsilon Theta is representing our noise predicting model, a neural network.
+We passed in xt and t into the neural network and we are comparing it to our Target (Epsilon).
+
+The `predict()` function.
+We have two things in a tuple that we need to pass into the model.
+We get those elements from the Tuple, pass it into the model.
+HF has its API for getting the output, we need to call .sample 
+to get the predictions from the model to learn.preds.
+Will be used later to do the loss function calculation.
+
+JH: We haven't seen something like this before.  
+Not aware of any other framework that would let us replace how prediction works.
+We inherited from trainCB which has predict() defined, and define a new version to override it.
+Instead of passing learn.batch[0] to the model we got a * in front of it.
+learn.batch[0] has two things in it, so * will unpack them and send each one as a separate argument.
+The model needs to take two things which the diffusers Unet does take two things.
+
+This is awkward about HF, including diffusers:
+Their models don't just return the result but they put it inside some name.
+Here they put it in "sample", that is why we added .sample at the end of the predict.
+People often get stuck on this, as HF takes/returns things in "weird forms".
+By inheriting from trainCB we can change predict todo whatever.
+
+That's the training Loop.
+We have a regular training Loop implemented in miniAI,
+where the loss function calculation the predictions learn.preds and the target is our Epsilon.
+We have those and we pass it to the loss function it calculates the loss function and does the back propagation.
+The training Loop is mostly copied from the 14_augment notebook, and added the ddpm callback.
+
+We have to initialize our DDPMCB callback with the appropriate arguments,
+number of time steps, minimum beta, maximum beta.
+We are using an MSE loss, becomes a regular training loop.
+Everything else is as before, the scheduler, progress bar, etc.
+We are using the same code to train a diffusion model as we did to train a classifier,
+just with one extra callback.
+We have a nice loss curve, we can save the model and we could load it later.
+
+Now that we have a trained model, what can we use it to sample.
+We're trying to reverse the path that we were following when we were adding noise.
+But the fully denoised image is not going to be a real image.
+In the paper most of the data points don't look as real images.
+We get a better estimate of which direction to follow, add back a bit of noise 
+get a new estimate noise prediction, remove the noise, and repeat.
+
+As in SGD, we don't take a gradient and jump all the way, we use a learning rate to go some of the way,
+because each of those estimates are not perfect, we just do it slowly.
+With noise prediction we are predicting a sort of gradient of P(X),
+and we need to keep making estimates as we're progressing.
+We keep evaluating noise prediction to get better estimates of the 
+gradient to finally converge onto the image.
+
+The paper has CIFAR10 images, is unclear how realistic these very small images look.
+
+In the code, we start with a random PureNoise image, nothing like a real image.
+We start out with X(T) and go all the way to X0.
+We have to put it in a batch format as the neural network expects.
+At each step we predict what direction to go using the noise predicting model.
+We pass X_t and our current timestep into the model and we get a
+noise prediction that is the direction that we need to move.
+We take x_t and first attempt to completely remove the noise to x_t_hat,
+an estimate that won't be accurate.
+We have some coefficients:
+x0_coeff is how much we keep of the estimate of our denoise image and
+xt_coeff is how much of the originally noisy image we keep.
+And we add in some additional noise z.
+We have x_0_hat * xo_coeff and x_t * xt_coeff, and add z, some additional noise.
+JH: x_t is a weighted average of x_0_hat and x_t plus some noise.
+
+As we get closer to a timestep=0, our estimate of x0 will be more accurate.
+x0_coeff will get closer, and xt_coeff will get closer to 0.
+We will be weighting more of the x_0_hat estimate and less of the x_t.
+At the end we will have our estimated generated image.
+That's an overview of the sampling process.
+
+We have a sample() function that's part of the callback.
+It would take in the model and the shape that we want for the images that we are producing.
+If we want to specify how many images to produce that's going to be part of the batch size.
+It's just part of the Callback.
+We have a DDPM callback, we can just call its sample method.
+We pass in our model and is going to produce 16 images, one channel image of 32 by 32.
+And we get our samples.
+We are collecting each of the time steps the S this effects of T.
+Our the predictions there are 1000 of them.
+We want the last one because that is our final generation,
+
+JH:
+This is slower than it can be but (except for U-net) we've done this from scratch.
+We only trained for about 5 epochs it took maybe 4 minutes to train this model.
+With little training it's decent, we can see some shirts, shoes, pants, 
+fabric texture, buckles.
+To compare, we did generative modeling, back when Gan was new,
+we created and trained for hours and got things that were not better than this.
+
+We can see how this sampling progresses over the multiple time steps,
+(that's what I'm showing here because I collected during the sampling process)
+We collected at each time step what that estimate looks like.
+This is an estimate of the noisy image over the time steps and it had to pause...
+We selected a specific "night" image and have a function to show 
+i steps during the sampling process of that image.
+We're just getting the images from time step 800 to 1000.
+We're looking every five steps and we're going from 800 to 9. 
+Now it'll make it visually easier to see the transition.
+
+It is a limitation of the noise schedule used in the original VDP paper.
+Specially when applied to smaller images, eg 32 by 32 .
+Other papers, e.g., the improved DDP paper, propose other sorts of noise schedules, 
+change how beta is defined.
+We have the definition of torch.linspace for our beta.
+People have different ways of defining beta that lead to different properties.
+Such improvements work well when we're working with smaller images.
+
+Notice we start from 800 because between 0 and 800 there's little change, mostly a noisy image. 
+We are not making full use of all those time steps, and
+we want to have it do something during that time period.
+There are some papers that examine this little bit more carefully.
+
+TODO: look at these papers and implement those models with this notebook as a starting point.
+It should be a simple change in terms of noise schedule or something like that.
+
+Our previous Journey was from "rubbish" Fashion MNIST classification to being good at it.
+Now is the start of our next Journey, trying to make better generative models,
+to the point where Fashion MNIST is too easy and we pick something harder.
+Eventually that will take us to stable diffusion and beyond.
+
+JH tried to better understand what was going on in the 15_ notebook 
+doing it in different ways, and tried to make it faster in Notebook 17. 
+
+First he drew a picture of the originals to remind us what the real ones look like.
+They have more detail than the samples that are in the 15_ notebook.
+They're 28x28 grey, so they're never going to look "great". 
+We're using a small simple dataset for experimenting, 
+until we're so good that it's not challenging anymore.
+And even then, when exploring new ideas first do it on a small simple dataset. 
+
+It was challenging working with the notebook 15_ class.
+When stuff is inside a class it is harder to explore.
+JH copied and pasted it and the before_batch contents and called it noisify.
+This forces us to figure out what are the actual parameters to it.
+These are the 3 parameters to the ddpm callbacks __init__.
+These things we can calculate from that, so those are all we need.
+
+What's the image that we're going to noiseify.
+The alphabar we can get but to be more general we can pass in Alphabar.
+Now we can experiment with it: we can call noiseify on the first 25 images 
+with a different random t for each one. 
+We can print out the T and then use those as titles.
+
+Lets rerun this because none of these look like anything because in this
+particular case all of the t's are over 200, and once
+we are over 200 it's almost impossible to see anything.
+Lets rerun this and see if we get a better one.
+T=0 is the pure image, T=7 it's just a slightly speckled image,
+by T>70 it's a bad image, then it's hard to see what it is...
+
+There's an extended version of map in fastcore, we can pass it a string and it calls this format string.
+If we pass it a string rather than a function.
+This is going to stringify everything using its representations, this is how we got the titles out of it.
+It is useful to draw a picture of everything to look at.
+
+Took the `sample` method and turn that into a function.
+Decided to pass everything that it needs
+(we could calculate all of these but since we calculated them before we just pass them in.
+This (?) is all copied and pasted from 15_ (?) version.
+The Callback now is tiny, because before batch is just noiseify 
+and the sample method just calls the sample function.
+
+We wanted to try many different ways of doing this as an exercise to help everybody
+see all the different ways we can work with our framework.
+
+Decided not to inherit from trainCB but instead inherited from callback,
+so we can't use tanishq's trick of replacing predict.
+Instead we now need some way to pass-in the two parts of the first element of the Tuple
+adds separate things to the model and return the sample.
+
+We could inherit from Unet2DModel, replace the model and replace specifically the forward function,
+that gets called and just call the original forward function.
+But rather than passing an X we are passing *X,  
+and rather than returning that we'll return that .sample.
+If we do that then we don't need trainCB anymore, and we don't need to predict.
+
+If we're not working with miniai we can always replace the model so that it has the interface that we need.
+We did the same create the Callback and now when
+we create the model we'll produce our Unet plus which we just created.
+
+To make things faster I tried dividing all channels by 2 and found it works well.
+Noticed that it uses groupNorm in the Unet which we briefly learned about before 
+GroupNorm splits the channels up into a certain number of groups.
+And we need to make sure that those groups had more than one thing in.
+We can actually pass in how many groups we want to use in the normalization.
+That's what this is for, they're going to be a little bit careful of these things.
+I didn't think of it at first and I ended up I think the Nam groups might have been 32 
+and got an error saying you can't split 16 things into 32 groups.
+
+It made me realize even tanishq probably has 32 in the First with 32 groups, 
+so maybe the groupNorm wouldn't have been working as well.
+The subtle thing to look out for now that we're not using anything inherited from trainCB.
+We either use trainCB itself or use our trained learner and that everything else 
+is the same as what tanishq had.
+
+We wanted to look at the results of noiseify here, as we call fit
+but don't call the training part of the fit and use the SingleBatchCB callback.
+Now learn.batch will contain the Tuple of tuples, which we can then use that trick to show. 
+We'd expect it to look the same as before.
+
+Always like to draw pictures of everything all along the way.
+Because it's very off, the first few times I do it wrong.
+Given that, we may draw a picture to try and see how it's wrong until it's fixed.
+It also tells me when it's not wrong.
+
+We'll just go ahead and do the same thing that Dinesh did.
+To make this train faster we want a Higher Learning rate.
+I realized the diffusers code does not initialize anything at all, they use the Pytorch defaults.
+But the Pytorch defaults aren't perfect for my model, 
+because they depend on what activation function we have, etc.
+
+JH wasn't sure how to initialize it, by chatting and looking at papers, ended up doing a few things.
+1) is to take every second convolutional layer and zero it out 
+we could do the same thing with using batchNorm.
+Since we've got a deep Network seemed like it might help by having the non-id path in the resnets 
+do nothing at first so they can't cause problems.
+
+We haven't talked about orthogonalized weights before, 
+and we probably won't because it requires to take the
+computational linear algebra course to learn about that.
+Using orthogonal weights for the down samples is a good idea
+and then for the app blocks they also set the second columns to zero.
+Also useful is from a [Google paper] is to also zero out the weights of the very last layer.
+It's going to start by predicting zero as the noise which can't hurt.
+So that was how I initialized the weights so call __init__ ddpm on my model.
+
+Something that made a huge difference is to replace the normal 
+atom Optimizer with one that has an Epsilon of 1e-5. 
+When we divide by the exponentially weighted moving average of the squared gradients.
+We divide by that if that's a very small number then it makes the effective learning rate huge.
+So we add this `eps` to it to make it not too huge.
+A good idea is to make this bigger than the default (don't know why the default's so small).
+Until JH did this anytime I tried to use a reasonably large learning rate somewhere around the middle 
+of the one cycle training it would explode.
+It makes a big difference this way I could train, get 0.016 after five epochs,
+And the samplings look pretty similar, got some pretty nice textures.
+
+To make it faster we can take advantage of mixed Precision. 
+Currently we're using the default 32-bit floating Point values.
+GPUs are much faster at doing 16-bit floating Point values.
+16-bit floating Point values aren't able to represent a wide range of numbers 
+or much precision at the difference between numbers.
+But if we can use them we get a huge benefit because modern GPUs
+have special units that do Matrix multiplies of 16-bit values extremely quickly.
+We can't just cast everything to 16-bit because then 
+there's not enough precision to calculate gradients properly.
+So we use mixed precision, use 32-bit where we need 32-bit and 16-bit for things we can.
+We're going to implement mixed precision in lesson 20. 

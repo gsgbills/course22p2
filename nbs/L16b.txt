@@ -7,7 +7,7 @@ When people lack a way of diagnosing problems inside their models
 they often randomly try things until something starts working...
 We're going to do it properly.
 
-We import what we just created in the learner and introduce a set_seed function.
+We import what we just created in the Learner and introduce a set_seed function.
 
 def set_seed(seed):
     torch.use_deterministic_algorithms(True)
@@ -16,8 +16,7 @@ def set_seed(seed):
     np.random.seed(seed)
 
 We've been using torch.manual_seed(seed) before.
-We've got 3 random number generators: Pytorch's, numpy's, and Python's.
-Let's seed all of them.
+We've got 3 random number generators: Pytorch's, numpy's, and Python's. Let's seed all of them.
 In Pytorch we can ask it to use deterministic algorithm, so things should be reproducible.
 We shouldn't always make things reproducible, but for lessons this is useful.
 So here's a function that lets you set a reproducible seed.
@@ -36,7 +35,7 @@ If we can train at a high learning rate then that means
 that we're learning to train in a stable way and stable training is is very good
 So let's try setting up a high LR of 0.6 and see what happens.
 
-so here's a function that's just going to create our learner with our callbacks,
+So here's a function that's just going to create our learner with our callbacks,
 and fit it and return the Learner in case we want to use it.
 It's training and then it suddenly fell apart.
 It's going well for a while, and then it stopped traning nicely.
@@ -54,8 +53,7 @@ and then we define __iter__ which makes this into an iterator.
 so when you iterate through this model you can
 iterate through the layers.
 
-We train this model in the usual way and this is going to give
-us exactly the same outcome as before, because we are using the same seed.
+We train this model in the usual way and it give us the same outcome as before, because we are using the same seed.
 so you can see it looks identical
 The difference is that instead of using nn.sequential, 
 we've now used something that saved the means and standard deviations of each layer.
@@ -123,10 +121,8 @@ append_stats is going to be passed the layer number (i), the module (mod),
 and the input and the output.
 We store the outputs mean in act_means and the output standard deviation in act_std.
 
-We go through each layer of the model and call on it register_forward_hook (that's part of pytorch).
-The function is always going to be called the function that's going to be
-called is the append_stats function passing in i as the first argument.
-
+We go through each layer of the model and call on it Pytorch's register_forward_hook.
+The function that's going to be called is the append_stats function passing in i as the first argument.
 We now fit that model, it trains in the usual way, but after each layer it's going to call the hook.
 So we get the same thing as before.
 
@@ -151,7 +147,7 @@ class Hook():
 When we create it we're going to pass in the module that we're hooking so we call 
 m.register_forward_hook and we pass the function that we want to be given (f), 
 and also pass in the hook class.
-Let's also define a remove to remove the hook, as we don't want it sitting around forever.
+We define a remove() to remove the hook, as we don't want it sitting around forever.
 The __del__ is called by Python when an object is freed, so when that happens 
 we should also make sure that we remove this.
 
@@ -161,14 +157,13 @@ def append_stats(hook, mod, inp, outp):
     hook.stats[0].append(acts.mean())
     hook.stats[1].append(acts.std())
     
-The new  append_stats it's going to get passed the hook because that's what we asked
-to be passed.
+The new  append_stats is going to get passed the hook because that's what we asked to be passed.
 If there's no .stats attribute in there yet then let's create one.
 Then we're going to be passed the activations so put that on the CPU.
 Then append the mean and the standard deviation.
 Now the stats are inside this object which is convenient.
 
-Now we can do the same thing as before but we don't have to set any of that Global stuff.
+Now we can do the same thing as before but we don't have to use that Global stuff.
 When we fit that it's going to run with the hooks.
 We get the same shape as usual and we get back the same results as usual.
 As we're going to be adding multiple Hooks, and this list comprehension 
@@ -180,17 +175,15 @@ We're going to call, pass in the model, pass in the function to use,
 and then fit the model and that's it.
 Just one extra line of code  to set up the whole thing.
 
-with Hooks(model, append_stats) as hooks:
-    fit(model)
+with Hooks(model, append_stats) as hooks:  fit(model)
 
 And then we can go through each hook and plot the mean and standard deviation of each layer. 
 So the hooks class is going to make things easier.
 
 We want to be able to loop through it, to index into it.
 All that behavior is in the Hook class.
-We're going to use the most flexible way of creating context managers. 
 The general way of creating a context manager  is to create a class 
-and define two special things __enter__ and __exit__.
+and define __enter__ and __exit__.
 
 __enter__ is called when it hits the with statement.
 If you add an as xxxx after it then the contents of xxxx variable 
@@ -349,48 +342,47 @@ because we'll be using that quite a lot.
 
 
 APPEND from 17 to Notebook 10
-I'm just going to mention a couple of minor changes that I made to our miniAI Library 
-this week one was I went back to
-our callback class in the learner notebook and I did decide in the end to
-add a Dunder gadatra to it that just adds these four
-um uh these four attributes and for these four attributes it passes it down to
-self.learn so in a callback you'll be able to refer to model to getself.land.model opt will be
-self.land.opt batch will be self.loan.batch and Epoch will be self.learn.epook
-you can change these you know you could subclass the Callback and add your own to underscore forward or you could
-remove things from underscore forward or whatever but I felt like these four things I access a lot another secret typing self.learn
-um and then I added one more property which is of course in a callback there'll be a self.training
-um which says from typing self.learn.model.trading
-um since we have model you can get rid of the learn but uh still I mean you so often have to check the training now you
-can just get self.training in a um in a callback so that was one change I made
-uh the second change I made was I found myself
-um uh getting a bit bored of adding train CB every time so what I did was I took
-the four training methods from the momentum learner
-subclass and I've moved them into a train learner subclass along with zero
-grad so now momentum learner actually inherits from train learner and just
-adds momentum take this kind of a quirky momentum method
-um and change a zero grad to do the momentum thing so you yeah so we'll be
-using train learner quite a bit over the next lesson or two so train Learners just a learner which
-has the usual training and it's exactly the same that first ao2
-has or you'd have in most Pi torch training loops um
-and obviously by using this you lose the ability to change these with a callback so it's a little bit less flexible
-um okay so those are little changes um and then I made some changes to what
-we looked at last week which is the activations notebook um and specifically
-um okay so I added a um a hooks callback
-um so previously we had a hooks class and uh it didn't really require too much
-ceremony to use but I thought we could make it even simpler and a bit more fast ai-ish or mini AIS by putting hooks
-into a callback so this callback uh as usual you pass a function that's
-going to be called for your hook and you can optionally pass it a filter
-as to what modules you want to hook um and then in before fit it will
-um filter the modules in the learner
-um and so this is one of these things we can now get rid of we don't need the dot learn here because model is one of the
+JH made minor changes to the miniAI Library.
+
+Notebook 09_
+Went back to Callback class in the learner notebook and add a __getattr_ to it 
+that just adds 4 attributes and for these 4 it passes it down to self.learn.
+In a callback we'll be able to refer to self.learner.xxxxx for xxxxx in model, opt, batch, and Epoch.
+We could subclass the Callback and add our own to _forward or we could 
+remove things from _forward.
+But JH felt these 4 things we access a lot.
+THIS CHANGE WAS LATER REMOVED?
+
+Added one more property (in a callback) there'll be a self.training which saves from typing self.learn.model.trading.
+Since we have model we can get rid of the learn.
+We often have to check the training now we can just get self.training in a callback.
+
+Took the 4 training methods from the MomentumLearner subclass and moved them into a TrainLearner subclass,
+along with zero_grad.
+MomentumLearner now inherits from TrainLearner and just adds momentum, 
+i.e., changes the zero_grad method to do the momentum.
+
+We'll be using TrainLearner quite a bit, it is just a Learner which has the usual training. 
+By using TrainLearner we lose the ability to change these with a callback,
+so it's a little bit less flexible.
+
+Notebook 10_ activations  
+Added a hooks callback.
+Previously we had a Hooks class and it didn't require too much ceremony to use.
+But JH thought we could make it simpler and fastai-ish by putting hooks into a callback.
+To this callback we pass a function that's going to be called for your hook and 
+optionally pass it a filter as to what modules you want to hook.
+before_fit it will filter the modules in the learner
+and so this is one of these things we can now get rid of we don't need the .learn here because model is one of the
 four things we have a shortcut to and then here we're going to create the hooks
 object and put it in hooks um and so one thing that's convenient here
-is the hook function now you don't have to worry and we can get rid of learn dot model you don't have to worry about checking in your hook functions whether
-in training or not it always checks whether you're in training and if so it calls that hook function you passed in and after it finishes it removes the
+is the hook function now you don't have to worry and we can get rid of learn.model 
+you don't have to worry about checking in your hook functions whether
+in training or not it always checks whether you're in training and 
+if so it calls that hook function you passed in and after it finishes it removes the
 hooks and you can iterate through the hooks and get the length of the hooks because it just passes these iterators
 and length down to self.hooks so to show you how this works we can create a hooks callback we can
-use the same um append stats
-and then we can run the model
+use the same um append stats and then we can run the model
 and so as it's trading um what we're going to be able to do is yeah we can now then here we go
 um so we just added that as an extra callback to our fit function I don't
 remember if we had the extra callbacks before I'm not sure we did so just to explain it's just I just added extra callbacks
@@ -398,6 +390,7 @@ here in the fit function and we're just adding any extra callbacks yeah
 um so then now that we've got that callback
 that we created because we can get iterate through it and so forth we can just iterate it through that callback as
 if it's Hooks and plot in the usual way so that's a convenient little thing I think it's convenient thing I added
+
 okay um and then I took our
 colorful Dimension stuff um which is defined when I came up with a
 few years ago and decided to wrap all that up in a callback as well so I've actually subclassed here our hooks

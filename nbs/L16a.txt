@@ -1,4 +1,5 @@
 Lesson 16. 
+
 Flexible trading framework the learner in the 09_learner notebook.
 Basic callbacks learner.
 Previous learner wasn't flexible but it had all the basic pieces, got a fit method, etc. 
@@ -44,9 +45,7 @@ def callback(self, method_nm): run_cbs(self.cbs, method_nm)
 
 is going to go for each callback and it's going to sort them in their order attribute.
 There's a base class through our callbacks which has an order of zero:
-
 class Callback(): order = 0
-
 so our callbacks are all going to have the same order of zero unless we will ask otherwise.
 
 Before we look at how callbacks work, let's just run a callback,
@@ -63,8 +62,7 @@ find an attribute with this name, (before_fit).
 TODO: do it all manually, create a callback set it to cbs zero,
 just like you're doing in a loop and then find out what happens if we call this and pass in this.
 You'll see it's returned a method and then what happens to that method it gets called? 
-let's try calling it.
-when we call the before_fit doesn't do anything very interesting.
+When we call the before_fit doesn't do anything very interesting.
 But if we call after_batch and then call after_fit there it is...
 [[make sure you don't just run code willy-nilly but understand it by experimenting with it.
 don't just use what JH already created]]
@@ -87,13 +85,11 @@ exceptions to say "I don't want to do this batch please".
 
 Let's create a little get model function that creates 
 a sequential model with just some linear layers and then we'll call fit. 
-It's not telling us anything interesting because the only callback we added 
-was the completion callback.
+It's not telling us anything interesting because the only callback we added was the completion callback.
 It's training doing something and we now have a trained model,
 just didn't print out any metrics because we don't have any callbacks for that.
 
-We could call a single batch callback which after a single batch it raises a
-cancelFitException.
+We could call a single batch callback which after a single batch it raises a cancelFitException.
 that could be useful if you want to just run one battery a model to make sure it works.
 Now we're going to add to our list of callbacks the single batch callback.
 let's try it, it ran and nothing happened because this canceled before this ran.
@@ -109,17 +105,15 @@ then call back to that callable at particular times.
 There are interesting kinds of callbacks that have multiple methods in them.
 Each method a callback is each class with all those methods of callback.
 
-Let's actually try to get this doing something more interesting by not modifying the learner  
-but just by adding callbacks.
+Let's do something more interesting by not modifying the learner but just by adding callbacks.
 It would be very nice if it told us the accuracy and the loss.
 Lets have a class that can keep track of a metric.
 Here is a metric class, lets see how it works.
 We could create, for example, an accuracy metric by defining the calculation
-necessary to calculate the accuracy metric, which is the mean
-of how often do the input equal the targets.
+necessary to calculate the accuracy metric, which is the mean of how often do the input equal the targets.
 We could then create an accuracy metric object, add a batch of inputs and targets,
 and add another batch of inputs and targets and get the value.
-and there you would get the 0.45 accuracy.
+And there you would get the 0.45 accuracy.
 
 Another way you could do it would be just to create a metric which simply 
 gets the weighted average for example of your loss so you could add
@@ -135,14 +129,11 @@ This is going to override the parent classes calculate so it does the
 calculation here and then we'll add that to our list of values,
 we will add to our list of batch sizes the current batch size,
 and then when you calculate the value we will calculate the mean weighted average.
-Notice that here value I didn't have to put parentheses after it and that's
-because it's a property, which just means you don't have to
-put parentheses after it to get it to get the calculation to happen.
+Notice that here value I didn't have to put parentheses after it because it's a property.
 We now need some way to use this metric in a callback to actually print out.
 
 First lets create the device callback, to use a GPU, without the complications we had before.
-To allow multiple processes in the dataloader and also use the GPU device 
-and not have everything fail.
+To allow multiple processes in the dataloader and also use the GPU device and not have everything fail.
 
 class DeviceCB(Callback):
     def __init__(self, device=def_device): fc.store_attr()
@@ -187,17 +178,14 @@ learn.fit(1)
 It still works so that's a good sign.
 
 Metrics.
-We don't have to write every single metric by hand because they
-already exist in an official pytorch project called torcheval, 
+We don't have to write every single metric by hand because they exist in an official pytorch project called torcheval, 
 that we can install with pip (on conda?).
-It has a pretty similar approach,  call .update and you call .compute 
-so they're slightly different names but they're basically similar to the
-thing that we just built.
+Torcheval has a similar approach, call .update and you call .compute,
+different names but they're basically similar to the what we just built.
 There's a list of metrics to pick from.
 Because we've already built our own now we're allowed to use theirs.
 So we can import the multiclass accuracy metric and the mean metric.
-If we call multi-class accuracy and we can pass in a mini batch of
-inputs and targets and compute and that all works.
+If we call Multi-class accuracy and we pass in a mini batch of inputs and targets and compute and that all works.
 reset which basically well resets it, and we're going to do that at the start of each epoch.
 If we reset it and then try to compute we get Nan because you can't
 get accuracy, as it is meaningless when you don't have any data yet.
@@ -263,13 +251,11 @@ Before we start fitting we tell the learner that we are the metrics callback.
 
 def before_fit(self): self.learn.metrics = self
 
-
 before each Epoch we will reset all of our metrics:
 def before_epoch(self): [o.reset() for o in self.all_metrics.values()]
 
 After each Epoch we will create a dictionary of the keys and values which are 
-we want to print out and we will call log which for now we'll
-just print them. 
+we want to print out and we will call log which for now we'll just print them. 
 
 def after_epoch(self):
         log = {k:f'{v.compute():.3f}' for k,v in self.all_metrics.items()}
@@ -289,7 +275,6 @@ def after_batch(self):
         x,y = to_cpu(self.learn.batch)
         for m in self.metrics.values(): m.update(to_cpu(self.learn.preds), y)
         self.loss.update(to_cpu(self.learn.loss), weight=len(x))
-
 
 This is running on the Nvidia GPU and showing our metrics, all the information we needed here.
 So that's an intermediate complexity learner.
@@ -354,23 +339,18 @@ def __getattr__(self, name):
 if it's one of these special 5 things don't raise an attribute error (the default thing it does)
 but instead call self.callback passing in that name.
 So it's actually going to call self.callback predict.
-So to make this work exactly the same as it did before I need a callback (TrainCB) 
-which does these five things:
+So to make this work exactly the same as it did before I need a callback (TrainCB) which does five things:
 
 class TrainCB(Callback):
-    def predict(self): self.learn.preds = self.learn.model(self.learn.batch[0])
-    def get_loss(self): self.learn.loss = self.learn.loss_func(self.learn.preds, self.learn.batch[1])
-    def backward(self): self.learn.loss.backward()
-    def step(self): self.learn.opt.step()
-    def zero_grad(self): self.learn.opt.zero_grad()
+    def __init__(self, n_inp=1): self.n_inp = n_inp
+    def predict(self, learn): learn.preds = learn.model(*learn.batch[:self.n_inp])
+    def get_loss(self, learn): learn.loss = learn.loss_func(learn.preds, *learn.batch[self.n_inp:])
+    def backward(self, learn): learn.loss.backward()
+    def step(self, learn): learn.opt.step()
+    def zero_grad(self, learn): learn.opt.zero_grad()
 
-They're almost the same as in our intermediate learner 
-but now we need to have self.learn in front of each (preds, loss, etc.),
+They're almost the same as in our intermediate learner but now we need to have learn in front of each (preds, loss, etc.),
 because this is a callback, it's not the learner.
-The Callback can access the learner using self.learn so
-self.learn.preds is assigned the return of self.larn.model passing in self.learn.batch[0] 
-(just the independent variables).
-Ditto for the loss,  backward, step, and zero_grad.
 
 At this point this isn't doing anything that it wasn't doing before but
 now if we want to use hugging face accelerate, 
@@ -379,8 +359,7 @@ we can actually change how it behaves, by creating a callback for training like 
 And if we want everything except one thing to be the same, we can inherit from trainCB.
 
 ProgressBar
-Llet's create a ProgressBar callback.
-The progress bar is going to show on it our current loss.
+Let's create a ProgressBar callback to show on it our current loss.
 I'm going to put create a plot of it so I'm going to use a project that we created 
 called Fastprogress (https://github.com/fastai/fastprogress) mainly created by Sylvain.
 
@@ -394,15 +373,14 @@ learn = Learner(model, dls, F.cross_entropy, lr=0.2, cbs=cbs)
 learn.fit(1)
 
 Before we fit we have to set self.learn.epochs, the thing that we Loop through for self.epoch.
-So we can change that so it's not just a normal range but instead it is a progress bar around
-a range.
+So we can change that so it's not just a normal range but instead it is a progress bar around a range.
 
-self.learn.epochs = self.mbar = master_bar(self.learn.epochs)
+learn.epochs = self.mbar = master_bar(learn.epochs)
 
 We can then check if the learner has a metrics attribute.
 Then let's replace the _log method there with ours that instead will write to the progress bar.
 
-if hasattr(self.learn, 'metrics'): self.learn.metrics._log = self._log
+if hasattr(learn, 'metrics'): learn.metrics._log = self._log
         self.losses = []
 def _log(self, d): self.mbar.write(str(d))
     
@@ -414,7 +392,7 @@ And that's why the metrics callback had this _log separately.
 It didn't just say print here  because this way classes can replace how the metrics are displayed.
 So we could change that to send them over to weights and biases, etc. 
 
-Before Epoch we do a similar thing the self.learn.dl iterator we
+Before Epoch we do a similar thing the learn.dl iterator we
 change it to have a progress bar wrapped around it.
 And then after each bar we set the progress bars comment to be the loss,
 so it's going to show the loss on the progress bar as it goes.
@@ -433,7 +411,7 @@ if they don't exist then it's going to use __getatrr__
 and it's going to try to find those in the callbacks.
 We could have multiple callbacks that define these things and then chain them together.
 
-But there's another way we could make these exist which is which is that we could subclass this.
+But there's another way we could make these exist: we could subclass this.
 Let's not use trainCB just to show us how a subclass would work.
 I'm going to subclass learner and I'm going to define the five directly in the learner subclass.
 This way it's never going to end up going to __getattr__ 
@@ -463,8 +441,7 @@ It doesn't actually have to zero the gradients at all.
 What if instead of zeroing the gradients we multiply them by some number, e.g.,  0.85.
 It would mean that our previous gradients would still be there,
 but they would be reduced a bit.
-Pytorch always adds the gradients to the existing gradients and that's why we
-normally have to call zero_grad.
+Pytorch always adds the gradients to the existing gradients and that's why we normally have to call zero_grad.
 But if instead we multiply the gradients by some number, a parameter.
 Lets create a parameter, ...
 
@@ -528,18 +505,13 @@ that is underutilized and somewhat controversial.
 we've got our cancelEpochexception so then we're just going to keep track of our learning rates.
 The Learning rates are stored by Pytorch inside the optimizer, in param groups. 
 We can grab the learning rate from that dictionary and we've got to keep track of the loss 
-append it to our list of losses and if it's less than the minimum we've seen
-then record it as the minimum.
-If it's greater than 3 times the minimum, then raise the cancelFitexception 
-to stop everything.
+append it to our list of losses and if it's less than the minimum we've seen then record it as the minimum.
+If it's greater than 3 times the minimum, then raise the cancelFitexception to stop everything.
 Finally we've got to update our learning rate to 1.3 times the previous one.
-In pytorch we have to go through each parameter group and grab the learning rate 
-in the dictionary and multiply it.
-
+In pytorch we have to go through each parameter group and grab the lr in the dictionary and multiply it.
 The callback will now contain an lrs and losses.
 This callback I can't just add it directly to the Callback list.
-We need to instantiate it first, because we need to be able to grab its learning rates 
-and its losses.
+We need to instantiate it first, because we need to be able to grab its learning rates and its losses.
 
 lrfind = LRFinderCB()
 cbs = [DeviceCB(), ProgressCB(), lrfind]

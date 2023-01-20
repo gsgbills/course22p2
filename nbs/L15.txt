@@ -1,8 +1,7 @@
 Lesson 15.
-We're going to create a convolutional autoencoder,
-and in the process we will see why it is a tricky thing.
+We're going to create a convolutional autoencoder, and see why it is a tricky thing.
 We will begin to work on a deep learning framework.
-
+CONVOLUTIONS
 Convolutions allow us to tell a neural network a little bit about the structure of the problem,
 making it easier for it to solve the problem.
 We're doing things with images, laid out on a 2D grid for black and white 
@@ -29,7 +28,6 @@ In this notebook we are importing stuff from miniAI,
 a little library that we're creating using nbdev:
 from miniai.datasets import *
 from miniai.conv import *
-
 The notebook starts with an export directive that says that 
 the default export module is called datasets.
 Some of the cells have an export directive on them. 
@@ -428,7 +426,7 @@ we're collating the dictionary for that dataset
 ((we built that in the datasets notebook))
 
 Let's actually make our collate function something that does
-to device which we wrote in our in our last notebook 
+to_device which we wrote in our in our last notebook 
 and we'll get a little dataloader function here which is going to go through each item in the data set dictionary
 and create a data loader for it and give us a dictionary of data loaders
 
@@ -460,8 +458,7 @@ more kind of normal way which is each image is a totally separate PNG image
 it's not all pre-converted into a single thing.
 
 so our data loader is spending all of its time decoding these pngs
-okay so while I'm training I can take h-top and you can see that basically my
-CPU is 100 used now.
+okay so while I'm training I can take h-top and you can see that basically my CPU is 100 used now.
 that's a bit weird because I've actually got 64 CPUs why is
 it using just one of them as the first problem but why does it matter?
 It matters because the GPU is only using 1%, hence it's slow. 
@@ -502,14 +499,14 @@ But there is a really simple way to do this:
 let's say we've got a 3x3 pixels, we could make that into a 6x6 by copying each pixel into 4 pixels, 
 simply turning each pixel into four pixels, nearest neighbor up sampling.
 It is not a convolution, it is just copying, but then we
-could apply a stride-1 convolution and that would double the grid size 
+could apply a stride-1 convolution and that would double the grid size.
 So our autoencoder is going to need a deconvolutional layer and that's going
 to contain two layers, up sampling nearest neighbor scale factor of 2, 
 followed by a conv 2D with a stride-1.
 For padding put kernel size slash two, that's a truncating division 
 because that always works for any odd sized kernel.
 As before we will have an optional activation function
-and then we will create a sequential using *layers 
+and then we will create a sequential using `*layers`
 so it's going to pass in each layer as a separate argument, which is what sequential expects.
 
 Let's write a new fit function, copied over from our previous one, going through each epoch. 
@@ -557,6 +554,7 @@ Roughly the same things, but there's no point having an auto encoder
 which can't even recreate the originals.
 If these looked almost identical to these it would be a fantastic network 
 at compressing things by eight times.
+
 This was fiddly to try and get it to work at all.
 He discovered that it can get it to start
 training is to start with a really low learning rate 
@@ -571,10 +569,8 @@ a better architecture, a variational autoencoder, etc.
 
 But doing it like this is going to drive us crazy.
 We need to be able to rapidly try all kinds of different things.
-JH often sees in projects/ kaggle is code that is
-all like manual, and then their iteration speed is is too slow.
-We need to be able to rapidly try things so we're not going to keep
-doing stuff manually anymore. 
+JH often sees in projects/kaggle code that is all manual, and then their iteration speed is is too slow.
+We need to be able to rapidly try things so we're not going to keep doing stuff manually anymore. 
 So let's build up a framework that we can use to rapidly try
 things and understand when things are and are not working.
 We are going to start creating a learner from scratch.
@@ -587,9 +583,8 @@ to add things like data augmentation,
 and to try a wide variety of architectures quickly.
 
 Let's start with fashion_mnist as before.
-Let's create a data loaders class which
-is going to look a bit like what we had before.
-We're just going to pass in two data loaders and store them away.
+Let's create a data loaders class which is looks a bit like before.
+We're just going to pass in two dataloaders and store them away.
 and I'm going to create a @classmethod from data set dictionary.
 and what that's going to call dataloader on each of the data set dictionary items
 with our batch side batch size and instantiate our class.
@@ -601,20 +596,16 @@ class DataLoaders:
     def from_dd(cls, dd, batch_size, as_tuple=True):
         return cls(*[DataLoader(ds, batch_size, num_workers=6, collate_fn=collate_dict(ds)) for ds in dd.values()])
         
-If you haven't seen @classmethod before it's what allows us to say Dataloaders.something.
+@classmethod allows us to say Dataloaders.something.
 In order to construct this we could have put this in __init__ 
-but we'll be building more complex data loaders things later so I thought we
-might start by getting the basic structure right.
-This is all pretty much the same as what we've had before.
-I'm not doing anything on the device here because as we know that didn't really work.
+but we'll be building more complex dataloaders later so lets get the basic structure right.
+We are I'm not doing anything on the device here because as we know that didn't really work.
 We're going to use to_device.
 
 Here's an example of a very simple
 learner that fits on one screen and is going to replace our fit function.
-A learner is going to be something that is going to train or learn a
-particular model using a particular set of data loaders, a particular loss function,
-a particular learning rate, a particular Optimizer 
-or some particular optimization function.
+A learner is going to train or learn a particular model using a particular set of data loaders, a particular loss function,
+a particular learning rate, a particular Optimizer or some particular optimization function.
 
 Normally people would store each of these separately, which is boilerplate.
 Instead we call fc.store_attr() to do that.
@@ -674,8 +665,7 @@ acc.value
 
 And then call .value to calculate the accuracy.
 .value doesn't require parentheses after it because it's a @property.
-A @property is something that just calculates automatically without
-having to put parentheses. 
+A @property is something that just calculates automatically without having to put parentheses. 
 
 Each time we call add we are going to be storing that input and that target
 and also the number of items in the mini batch (optionally).
@@ -684,8 +674,7 @@ We then call .calc which is going to call the accuracy calc,
 to see how often input and target are equal.
 Then we're going to append to the list of values that calculation.
 And we're also going to append to the list of ns (in this case just one).
-Then to calculate the value, we just do that so that's all that's
-happening for accuracy.
+Then to calculate the value, we just do that so that's all that's happening for accuracy.
 
 Then for loss we can just use metric directly, because it will just calculate 
 the average of whatever it's passed.
@@ -695,8 +684,7 @@ so it's going to be the n and then add the value 0.9 with a mini batch size of 2
 And then get the value and that's the
 same as the weighted average of 0.6 and 0.9 with weights of 32 and 2.
 
-So we've created a metric class and we can use it to create
-any metric by overwriting calc.
+So we've created a metric class and we can use it to create any metric by overwriting calc.
 Or we could create things from scratch, as long as they have an add and a value.
 
 We're now going to change our learner, keeping the same basic structure.
@@ -708,53 +696,49 @@ one_batch is going to do the prediction, get loss and if it's training it's goin
 to do the backward step and zero grid.
 But there's a few other things going on.
 
-Let's just look at it in use first.
-When we use it we're going to be creating a learner with the model, dataloaders, 
-plus function, learning rate and some callbacks.
+Let's look at it in use first.
+We create  a learner with the model, dataloaders, plus function, learning rate and some callbacks.
 And we call fit and we're going to have charts and stuff.
 The basic idea is very similar.
 We're going to call fit and when we construct it we're going to be passing 
 the same things as before, and one extra thing callbacks.
 Store the attributes as before, and we're going to be doing some stuff with the callbacks.
 
+NB: FOLLOWING MAY HAVE CHANGED
+
 When we call fit we store how many epochs we're going to do and also the
 actual range that we're going to loop through as self.epoch.
 We're going to create the optimizer using the optimizer function and the parameters
 and then we're going to call _fit because we've created this special
 decorator with callbacks what does that do?
-callbacks is a class it's gonna just store one thing which is the name in this case 
-the name is fit.
+
+callbacks is a class it's gonna just store one thing which is the name in this case the name is fit.
 decorators get past a function so it's going to get past this whole function 
 and that's going to be called f.
-__call__ is what happens when a class is treated an object 
-is treated as if it's a function.
+__call__ is what happens when a class is treated an object is treated as if it's a function.
 So it's going to get this function so this function is _fit.
 We want to return a different function (it's going to call the
-function that we were asked to call using the arguments 
-and keyword arguments we were asked to use)
-but before it calls that function it's going to call a special method called
-callback, passing in the string before (in this case) _fit.
+function that we were asked to call using the arguments and keyword arguments we were asked to use)
+but before it calls that function it's going to call a special method called callback, 
+passing in the string before (in this case) _fit.
+
 After it's completed it's going to call that method called callback,
 passing the string after _fit and it's going to wrap the whole thing 
 in a try except block, looking for an exception called CancelFitException.
 And if it gets one it's not going to complain.
-For example here is a callback
-called deviceCB and before fit will be called automatically
+For example here is a callback called deviceCB and before fit will be called automatically
 before that _fit method is called and it's going to put the model
 onto our device Cuda or MPS if we have one.
 
-we're going to call fit it's going to go through these lines of code 
-it's then going to call _fit.
+we're going to call fit it's going to go through these lines of code it's then going to call _fit.
 _fit is this function, so it's going to call our learner.callback passing in before
 _fit and callback is defined here 
 callback is going to be past the string before _fit
 it's going to then go through each of our callbacks sorted based on their order.
-and it's going to look at that callback and try to get 
-an attribute called before_fit.
+and it's going to look at that callback and try to get an attribute called before_fit.
 Here it will find one and so then it's going to call that method.
 If that method doesn't exist (it doesn't appear at all) then getatrr() will
-return instead identity(), a function that whatever arguments it gets passed 
-it returns them.
+return instead identity(), a function that whatever arguments it gets passed it returns them.
 And if it's not past any arguments it just returns.
 
 The best way to learn about these things is to open up this Jupiter notebook and try
@@ -763,10 +747,11 @@ for example, let's try how does identity work.
 I could call it and it gets nothing, I can call it with (1) it gets back 1,
 I could call it with 'a', gets back 'a'.
 To see how is it doing that we can add a break point.
-In our debugger we can hit H to find out what the commands are,
-but you really should do a tutorial on the debugger if you're not familiar with it.
+In our debugger we can hit H to find out what the commands are.
+
+TODO: Tutorial on the pdb debugger if you're not familiar with it.
 Then we can step through each one so I can now print args.
-args  is actually a command which will just tell the arguments to any function 
+args is actually a command which will just tell the arguments to any function 
 regardless of what they're called.  
 We can step through by pressing n, and we can check what is X now, etc.
 

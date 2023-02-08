@@ -1,0 +1,731 @@
+Lesson 21.
+
+Weights and Biases
+We've been using the fashion MNIST images dataset at a small scale,
+rapidly trying out different ideas to see nuances to explore further.
+Time now to explore ramping up to the next slightly larger, harder dataset,
+check that the ideas still hold for longer training runs and more difficult data.
+The learnings from Fashion MNIST should move across, most of the time they do, but sometimes they don't.
+CIFAR10 is used by many/most papers on generative modeling as the smallest dataset, and 
+most classifications papers track reported results on CIFAR10.
+CIFAR10 is popular with the recent diffusion papers, then maybe Imagenet, and then
+whatever larger massive dataset they're training on.
+FastAI was notable in 2018 for managing to train CIFAR10 to .94 classification (the Benchmark)
+during a competition, with a cost of 26 Cents of AWS time, which won the competition.
+It is an OK dataset for quick testing, but there are reasons why we don't like it,
+so we'll soon move on to something better.
+
+This notebook is using the same code that Jeremy's going to be looking at and explaining.
+The dataset is on Huggingface so we load it just like we did the fashion mnist.
+The images are 3 Channel rather than single channel so the shape of the data is 
+different to what we've been working with.
+We now have a 3 Channel red green and blue image, and this is what a batch of data looks like.
+There are 32 images in the batch: batch by Channel by Height by Width.
+There are different classes: airplane, a frog, a puzzle with an airplane on the cover,
+a bird, a horse, a car, etc. 
+Generating these images is quite frustrating.
+If we generated this we'd think the model is doing a really bad job, a CIFAR10 dog looks like this.
+A metric that can help, to be shown later, to discern whether it's good, as the images are bad.
+The generator can see how "good" the samples are.
+For visually inspecting these CIFAR10 images are not great.
+
+For the noiseify and everything else we follow what JH is going to show later.
+We're adding random noise in the same shape as our data so even though the data now has three channels,
+the noise apply function still works.
+When we visualize the images, as we're adding noise on the 3 channels, 
+and some have extreme values...  they look different.
+For example, this frog doesn't have as much noise and is vaguely visible.
+But most images are nearly impossible to look at and tell what image is hiding out.
+
+We are paying attention to the broadcasting rules and the right dimensions.
+We use the same approach to learning UNet, except that we need to specify 3 input and 3 output channels. 
+We want to use this demo to justify experiment tracking.
+So we are bumping up the size of the model substantially, from the default settings 
+that we used for fashion MNIST.
+The diffuser's default UNets have many more parameters: 274 million versus 15M.
+We're going to try a larger model, some (long-term?) training.
+We could just do the same training that we've always done just in the notebook,
+set up a learner with `ProgressCB` to plot the loss and subtract some metrics.
+Waiting for training to finish before we can (DDPM) sample,
+we interrupt the training to peek at what it looks like initially, and plot some samples.
+The sampling function `sample` works without modification: passing in size `sz`(a 3 Channel image).
+We would like to keep track of what experiments we have tried, and be able to see things over time.
+What the samples look like if we generated after the first epoch, after the second Epoch, etc.
+That's where the `WandBCB` callback comes useful.
+
+JH: There are simple ways to do it: (1) save sample images as files every epoch or two.
+(2) Have an updating plot as we train with fastprogress, we could have an updating set of sample images.
+But these wouldn't handle the tracking, looking over time at how changes have improved things or made them worse.
+That would require saving multiple versions of a notebook or keeping a research journal.
+J: A bit lazy sometimes maybe I don't write down what I'm trying, saved too many untitled notebooks..
+There are solutions for experiment tracking and logging, e.g., Weights and Biases.
+
+We run a training with an additional `WandBCB` callback, allowing us to log, e.g. samples.
+The website wandb.ai is where the callback is sending information to.
+Weights and biases accounts are free for personal and academic use.
+Sign in, log in, get an authentication token, and then we can log experiments into different projects.
+For each experiment anything that you call weightsandbiases.log at any step in the training 
+is getting logged, sent to their server and stored, so we can later access and display it.
+They have plots that help visualize and can be shared, and reports that integrate the data interactively.
+You can go and look at a project, and log multiple runs with different settings.
+For all that we've tracked, e.g., training loss and validation, learning rate, lr schedule.
+We can save a model as an artifact on their server, so we can correlate between the 
+exact model code and the logs.
+
+"save code equals true" creates a copy of the whole Python environment, libraries installed what code was ran.
+It enables to come back later and given some good output (eg images that look good),
+retrieve back and see which was the experiment.
+There we can check what settings were used, the initialization, configuration details, comments, etc.
+
+JH: There are other frameworks: wandb asks to send the info to an external website.
+Google's Tensorboard provides similar functionality but it runs on our computer, uses a local database.
+There are some benefits to have it run as a remote service, e.g., people collaborating on a project.
+It's not always the best approach, but there are benefits to using this service.
+
+We can also create reports for sharing, to show somebody the final results 
+and being able to pull together the results from some different runs.
+A place where everyone can inspect the different loss curves for any run, e.g., the batch size, etc.
+Having a permanent record that someone else deals with storage and the tracking.
+
+This is using the Callback system with wanb.
+We start an experiment with wandb.init, specify configurational settings that we used there.
+To log use `wandb.log()` passing-in the name and the value, eg, here logging the loss and then the value.
+When done `wandb.finish()` and that syncs everything up and sends it to the server.
+
+JH: Great the way you've inherited from `MetricsCV` and replaced the 
+`_log` (that we previously used to allow fastprogress to do the logging),
+so now it allows weights and biases to do the logging.
+
+Using the Callback system, wanted to do the things that `MetricCB` normally does,
+tracking different metrics, it will still do that,
+and we offload to the (super) original `MetricsCB` method 
+things like the `after_batch`, and in addition to log to the weights and biases.
+`before_fit` we initialize the experiments, in every batch we load the loss.
+After every epoch the default `MetricsCB` is going to accumulate the metrics, etc., then call `_log()`.
+We modify `_log()` to log the current loss during training, else to log the validation loss, 
+some samples, weights and biases.
+Flexible in terms of what we can log, (images, videos, audio), etc.
+It also takes a mathlib figure.
+We generate some samples and plot them with `show_image`, and return the figure `fig`, which we can then log.
+That becomes these images that we can see over time, every time that log function runs, 
+i.e., after every epoch.
+Then we can go see what the images look like.
+
+JH: make your code even simpler in the future if we had show images maybe it
+could have like a optional return fig parameter that returns the figure,
+and then we can replace those 4 lines of code with one.
+
+We can also create a PIL image, make a grid or overlay text, etc., then just log that as wandb image.
+We pass the callback as an extra callback to the set of callbacks for the learner, instead of a `MetricCB`.
+When we call that `.fit` we still get a progressbar, still get printed out version,
+because the `log()` function still prints those metrics.
+Instead of watching progress in the notebook, we can set it to run disconnect from the server,
+take time off and then check (eg on the phone) what do the samples look like.
+
+They are starting to look like less random nonsense but still not recognizable.
+Maybe we need to train for longer that can be the next experiment.
+Next we should think of some extra metrics but JH will talk about that.
+
+It's worth setting up a bit of infrastructure, to know what were the settings used,
+saving the model so you have the artifact as results, etc.
+There are other similar tools to track experiments in lieu of creating many different notebook versions.
+
+T: Weights and biases can also save the exact code that we used to run.
+If we make any changes to the code we know which version was used for this particular experiment,
+so it is reproducible. 
+Wandb has different features
+When T  wants to run a model on the test set he takes it off of Weights devices, 
+download it and write it on the test.
+
+JH: An alternative point of view, I don't use it or any experiment tracking framework myself.
+Maybe I could get some benefits by doing so but I fairly intentionally don't,
+because I don't want to make it easy for myself to try a 1000 different hyper parameters.
+I like to be very directed, so the workflow I'm looking for is one that allows that to happen.
+Constantly going back and refactoring and thinking what did I learn and how do I change things from here.
+Never doing 17 lrs and 6 architectures concurrently.
+
+We can normally have a script that does 100 runs with different models and differences 
+and then look at my weights and biases and say filter by the best loss.
+Which is very tempting.
+
+JH: Be aware that these tools exist and I in early 2023 weights and biases is the best one,
+it has the best integration with fastAI and miniAI.
+But do not go crazy on experiments, they have their place,  but also carefully thought-out hypotheses testing, 
+changing the code, is the best approach.
+
+
+Notebook 18_fid
+We're going to start showing new research directions beyond stable diffusion.
+We will get to Unets later.
+A challenge experimenting was that the generated images looked good, is 
+very easy to convince ourselves we're improving.
+But there is no metric that indicates that these images would look to a human as pictures of clothes.
+Only a person can do that.
+There are some metrics which give an approximation, not a replacement for human eyes, but there are useful.
+We will see *FID* the most common metric, and another metric called *KID*.
+
+We demonstrate them using the model we changed in the last lesson, DDPMv2, in notebook 17_.
+We trained with mixed precision and we saved it as `fashion_ddpm.mp`.
+The usual Imports, etc. 
+But a slight difference this time, we're going to try to get the FID for a model we've already trained.
+We get the trained model with `torch.load`, and then `cuda()` to move it to the GPU.
+We call it the smodel, the samples model.
+`sample()` is a copy of DDPM from the last time.
+We will sample from that model, and calculate the FID score, 
+which indicates how similar are the sample to real images.
+For the sample images we look at some statistics of some of the activations.
+We create a new data loader which contains no training batches, 
+it contains one validation batch which contains the samples.
+It doesn't matter what the dependent variable is so we just put in the same dependent variable 
+that we already had.
+We use that to extract some features from a model.
+
+In notebook 14 we created a summary that shows the different blocks of the model.
+There are various different output shapes, e.g., the first block it's a batch size of 1024, 16 channels 28 by 28
+and then we had 32 channels 14 by 14 and so forth.
+Before the final linear layer we had 1024 batches and 512 Channels, with no height and width.
+The idea of FID and KID is that the distribution of these 512 channels for a real image has a particular 
+"signature", i.e., looks a particular way.
+We're going to take our samples, run it through a model that's learned to predict
+e.g., "fashion glasses", and grab the "GlobalAvgPooling" layer.
+We average it across a batch to get 512 numbers, that represent the mean of each of those channels.
+Those channels might represent "features", for example, "does it have a pointed collar",
+"does it have smooth fabric", "does it have sharp heels", etc.
+An image is probably not a normal fashion image if it has both sharp heels and flowing fabric,
+i.e., certain sets of means of these activations don't make sense.
+
+This is not a metric for an individual image, but for a set of images.
+We generate a bunch of images and ask do they look like fashion images.
+If we look at X % have this feature and have that feature.
+Looking at those means is like comparing the distribution within all these images generated,
+do they roughly have the same amount, sharp colors as those.
+
+Let's start at that level which is this `feats.mean`. 
+We take our samples and we pass them through a pre-trained model that has learned 
+to predict what "type of fashion" something is.
+In the 14_ notebook we trained a 20 epoch model in the data augmentation section, which had a .943 accuracy.
+We pass our samples through this model and we expect to get some useful features.
+This was complicated because this model was trained using data that had gone through 
+a transformation of subtracting the mean and dividing by the standard deviation.
+But that is not what we're creating in our samples.
+Most diffusion models samples tend to be between -1 and 1.
+JH added a new section to the bottom of the 14_ notebook which replaces the transform with something
+that goes from -1 to 1, creates those data loaders and
+then trains  something that can classify fashion, and saved this as `data_aug2.pkl`.
+It is the same as before but it's a fashion classifier where the inputs are expected to be between -1 and 1.
+
+BUT, our image samples are NOT between -1 and 1.
+In notebook 17_ ddpm2 we use `TF.totensor()` and that makes images that are between 0 and 1. 
+This seems to be "a bug", that image (pixels?) go between 0 and 1, so we'll look at fixing that in a moment.
+Now we're trying to get the FID of our existing model. 
+We take the output of our model and we multiply by 2, so that it will be between 0 and 2,
+and subtract 1, to change our samples to P between -1 and 1.
+Now we can pass them through our pre-trained fashion classifier.
+How do we get the output of the pooling layer which is what we want?
+
+To flex our Pytorch muscles lets see a couple of ways to do it.
+Lets load the model we just trained the `data_aug2.pkl` model.
+We can use a hook, using `HooksCallback` to create a function `append_outp` 
+which just depends on the output, which is what we want.
+As the model is a Sequential, we go through the layers, to find the layer we want, '6'.
+Once we've hooked that we can pass that as a callback.
+It is a bit "weird" calling `fit()` because `train=False`, we just want 
+to make one batch go through and grab the outputs in our hook's `outp`.
+We can then grab a few of those to have a look, it is a 64 by 512 set of features.
+
+Another way to do it.
+Sequential Modules are Python collections that have an API that they're expected to support.
+There is a delete "something" call for a collection, like a list.
+We can delete the last 2 layers and be left with just the other layers.
+That means we can just call `capture_preds`. 
+We delete layers eight and seven, call `capture_preds` and this is
+going to give us the entire 10 000 images in the test set.
+
+Now we've got a (10) thousand real images look like at the end of the pooling layer.
+We need to do the same for our sample.
+We load up our `fashion_ddpm_mp`, we call sample, let's just grab 256 images for now,
+make them go between -1 and 1, make sure they look okay.
+Create data loaders where the validation set just has one batch which contains our samples.
+We call `capture_preds` to give the features, as we're passing the sample to model,
+and model is the classifier which we've deleted the last two layers from.
+That's going to give a 256 by 512, so we can get the means now.
+
+That is not enough to tell us whether a tensor looks like a real fashion image.
+Drawing:
+We started with a batch of 256 and 512 channels, and squished them by taking their mean.
+So now it is a 512, because this is the mean for each Channel.
+We did the same thing for the bigger full set of real images.
+One matrix is for our samples and another for our real images.
+When we squish it we get again 512.
+We could now compare these two, but we could have some samples that don't look like images 
+but have similar averages for each Channel.
+Hence we create a covariance Matrix across the channels so it's going to be 512 by 512. 
+It takes each of the columns, and asks what is the difference between each element 
+here and the mean of the whole column, multiplied by the same thing for a different column.
+On the diagonal it is the same column twice, hence in the diagonal is just the variance.
+More interestingly the ones off diagonal, e.g.,  
+what's the relationship between column one and column two.
+If column one and column two are uncorrelated then this would be zero.
+If they were identical then it would be the same as the variance in here.
+It is how correlated are they.
+We do the same for the reals to give us another 512 by 512.
+Each column represents a feature, eg "pointy heels" and "flowing fabric".
+We would expect these to be negatively correlated, so in the reals matrix 
+the corresponding cell is going to have a negative value.
+If in the samples the same cell was zero or worse if it's positive, 
+it would indicate that those are probably not real.
+As it is unlikely to have images that have both pointy heels positively associated with a flowing fabric.
+We are looking for two datasets that hev similar covariance matrices and their means are also similar.
+
+There are ways of comparing two sets of data to evaluate if they are from the same distribution.
+The FID metric evaluates if they have similar covariance matrices and similar mean vectors.
+`_calc_stats` returns the means and the covariance metrics.
+We call `_calc_stats` for both the sample features and the actual dataset or the test dataset.
+Given those `s1,s2` features we can calculate the "Fresher Inception Distance" (FID). 
+Since we multiply together the two covariance matrices the result is going to be bigger, 
+thus we need to scale it down.
+When working with scalars, after we multiply two of them, we take the square root to scale back down to
+the original scale.
+To "renormalize" these matrices we've got to take the matrix square root.
+We are going to slightly cheat. 
+We've used the float square root from Python's standard library, and it isn't interesting.
+To calculate the float square root from scratch the classic way is to use Newton's method,
+by solving a*a=x, and solve it using the derivative, and taking a step along the derivative a bunch of times.
+We can do the same to calculate the matrix square root using the Newton method, but 
+for matrices it is slightly more complicated, see `_sqrtm_newton_schultz()`.
+
+Since we have implemented it from scratch we can use the one from scipy,
+to give us a measure of similarity between the two covariance matrices.
+And here's the measure of similarity between the two mean matrices,
+just the sum of squared errors, and it's just normalizing.
+The "trace" is the sum of the diagonal elements.
+We need to add traces and subtract two times the trace.
+The result is the Fresher Inception Distance, a number which represents how similar a set of samples 
+are to some real image data.
+The name "Fresher Inception Distance" is peculiar, it has nothing to do with Inception, but as
+people use the famous Inception model (Imagenet winning model from Google brain).
+Inception is not a good model to use for this, it just happens to be the one which the original paper used,
+so everybody now uses it to compare results.
+ 
+We're going to get a more accurate metric by using a model that is good at recognizing fashion MNIST.
+It's better to use a model that we have trained on our data and we know it's good at that.
+It is not a "FID".
+
+T: two other caveats of FID: 
+1) it is dependent on the number of samples used, more/less accurate with more/less samples. 
+It is biased, with less samples it's too high, papers need to report how many samples they used.
+2) All images are at a size 299 by 299, the size that the Inception model was trained.
+Applying Inception for measuring the distance means resizing the images to 299 by 299 which
+may not make sense, eg Fashion MNIST is 28 by 28 very small images, resize it to 299 .. :)
+For later models e.g., with large 512x512 or 1024x1024 images, they shrink to 299 by 299, loosing a lot of detail.
+It is a problem comparing them, visually they are better images but the FID score doesn't capture that, 
+because it is using shrinked smaller images.
+
+JH: We're going to look at those 2 issues.
+The KID (Kernel Inception Distance) metric compares two distributions in a way that is not biased,
+so it's not necessarily higher or lower if you use more or less samples.
+It is simpler to calculate than the FID.
+We create a bunch of groups or partitions, go through each of those partitions, grab a few X's and Y's at a time,
+and then calculate the MMD, which is a matrix product. 
+We take the cube of it, `k()` is the kernel, and we do that for the first sample bytes 
+compared to itself, the 2nd compared to itself and the first compared to the second, 
+and then normalize them in various ways, and add to the two with themselves together and subtract the other one.
+
+KID does not use the stats (the means and covariance Matrix), it uses the features directly.
+The final result is the mean of this calculated across different little batches.
+It gives us a measure of the similarity of these two distributions.
+People don't use KID, even though it doesn't have a bias problem, because it has a very high variance,
+i.e., when we call it multiple times with samples with different random seeds we get very different values, hence, not useful. 
+
+We don't have a good unbiased metric.
+Even if we did it would only tell how similar distributions are to each other, it doesn't tell us whether they "look" good.
+That is why all good papers have a section on human testing.
+Still, FID is useful for comparing fashion images. 
+Humans are good at looking at faces at a reasonably high resolution, but not good at looking at 28x28 fashion images.
+So it's particularly helpful for stuff that our brains aren't good at.
+
+We wrap this up into a `ImageEval` class.
+We are going to pass in a pre-trained model for a classifier, and data loaders, 
+which we're going to use to calculate the real images.
+
+We call `capture_preds` on to get the features for the real images, and then we can also calculate the stats for the real images.
+We call `_calc_fid` passing in the `stats` for the real images and `_calc_stats` for the features from our samples, `samp`.
+Where the features are given by `get_feats()`, we pass in our samples, any random `y` value is fine so we 
+have a single tensor `tensor([0])`, and call `capture_preds`.
+
+We can now create an `ImageEval` object `ie` passing in our classifier, data loaders with the real data,
+and any other callbacks we want.
+We call `ie.fid`, and 33.9 is the FID per these samples.
+
+KID is on a very different scale, e.g. only 0.05, generally much smaller than FIDs.
+We are mainly going to be using FIDs.
+Here's what happens if we call FID on sample zero, sample 50, sample 100, ..., all the way up to 900, 
+and then we also do samples 975, 990, and 999.
+Over time our samples improved so that's a good test.
+It is curious that they stopped improving about here.
+JH has not seen anybody plot this graph before, and it's something to look at because it's telling us
+if the sampling is making consistent improvements.
+
+To clarify this is like the predicted denoised sample at the different stages during sampling.
+If I was to stop something now and just go straight to the predicted X error what would the FID be?
+
+Same for the KID, and the plots look the same.
+It's a good idea to take the FID of an actual batch of data, to tell us how good we could get.
+That's a bit unfair because of the different sizes, the data is 512, our sample is 256,
+but anyway there it's it's a pretty huge difference.
+
+What does it take to get a real FID with an Inception Network.
+We are not reimplementing the Inception Network, just grab it from Pytorch_fid.
+There is no reason to study the Inception Network because it's obsolete now.
+It wants 3 Channel 299 by 299 images, so we call resize input to have it done.
+Created a wrapper `IncepWrap` for an Inception V3 model that when we call forward it takes a batch and replicates 
+the channel 3 times to create a three Channel version of a black and white image by replicating it 3 times.
+To flex our Pytorch muscles, try to replicate this, i.e., get an Inception model working on the Fashion MNIST samples.
+
+We can just pass that to our `ImageEval` instead and it gives 63.8 and on a real batch of data it gets 27.9.
+This indicates that this model is less effective than our real fashion mnist classifier. 
+A difference of a ratio of three, our FID for real data using a real classifier was 6.6, that is encouraging.
+We now have a FID, more specifically we now have an ImageEval.
+
+J: Other FIDs reported are CIFAR tiny 32 by 32 pixels resized up to 299.
+FID is a slightly weird metric, if we saved images as jpegs, and then you load them, the FID may be twice as bad.
+The takeaway it's really useful when using the same backbone model, the same approach, same number of samples.
+Then we can compare apples to apples.
+
+For our own experiments these metrics are good but they may not be to compare to other models, 
+then it is best to rely on human studies. 
+This will be very useful for for us, we're going to use the same set number of samples, 
+and the same fashion MNIST specific classifier.
+
+We want to "fix our bug", that we were feeding into our Unet in ddpmV2, the original ddpm images that go from zero to one.
+Everybody feeds in images that are from -1 to 1, it is easy to fix.
+"Everybody knows it's a bug because that's what everybody does", nobody does anything else,
+and it's very easy to fix so JH fixed it by adding this to ddpmv2, and re-ran it and it didn't work, it made it worse.
+"Was the start of a few horrible days of pain", 
+When we fix a bug and it makes things worse, it generally suggests some other bug somewhere else that somehow is offset your first.
+JH went back through every other notebook, every cell, and found at least one unrelated bug:
+that we hadn't been shuffling our training sets, so fixed that.
+Went through everything from scratch 3 times re-running everything, checking every intermediate output,
+days of annoying work and made no progress at all.
+
+Then asked Jono's question more carefully, and provided a less flippant response, "I don't know why everybody does this".
+Asked if anyone had seen any math papers that are based on this particular input range.
+Maybe what everybody does is not the right thing to do, is there any reason to believe it is the right thing to do.
+Given that it seemed like fixing the bug made it worse maybe not.
+We are confident that having centered data is better than uncentered data.
+Having data go from zero to one seems weird, maybe the issue is not that we've changed the center, but that we've scaled it down.
+Rather than having a range of 2 it's got a range of 1.
+Then subtracted 0.5, so now rather than going from 0 to 1 it goes from -0.5 to 0.5.
+If the hypothesis is correct, that the -1 to 1 range has no foundational reason for being,
+and we've accidentally hit on the fact that a range of 1 is better than a range of 2.
+Then this should be better because this is a range of 1 and it's centered properly.
+
+This is DDPMV3, ran that and yes it is better.
+Now we've got FID, so run it on ddpmv2 and on ddpmv3 and it was much better.
+JH run a lot of other experiments at the time, and all experiments were fallen apart,
+then when fixed the bug, all the things that I thought weren't working suddenly started working.
+
+Bugs can result in accidental discoveries, and the trick is always to recognize when that's happened.
+Noble gases were discovered by a chemistry experiment went wrong and left behind some strange bubbles 
+at the bottom of the test tube.
+Most people would just dismiss it, but people who were careful enough asked questions.
+There shouldn't be bubbles there, let's test them carefully, they don't react...
+Most people would say "that didn't work the reaction failed" but if you're really careful 
+maybe the fact they don't react is the interesting thing.
+
+J: JH said things didn't work or it was worse... when we saw the images they looked fine,
+the FID was slightly worse, but it was OK, and if we trained it longer it eventually got better.
+There were some things that sampling occasionally went wrong one image in 100.
+But it was not everything fell apart, some moments were slightly worse than expected.
+If you are doing the Run and Gun and try a bunch of things, doubled the training time, 
+set a few runs going, and looked at the weights and biases stats later...
+That seems like it's better now, we just need to train for longer, and we have Internet GPUs and lots of money, 
+JW had a deep intuition for where it should be at this stage in training versus where it was,
+what the samples should look like is what they were and you had the FID...
+Would have expected a FID of nine and getting 14 what's up here, and that was enough to start asking these questions.
+
+JH: definitely I drive people crazy that I work with: I need to know exactly why this is not exactly what we expected.
+When something's mysterious and weird it means that there's something we didn't understand 
+and that's an opportunity to learn something new.
+Going -0.5 to 0.5 made the FID better.
+Moved from depression to we're actually onto something, so started experimenting with more confidence.
+
+Started looking at our schedule, we'd always been copying and pasting this set of stuff and started questioning everything: 
+Why is this the standard? Why are these numbers here? 
+and we don't see any particular reason why those numbers were there.
+We should experiment with them.
+To make it easier created a little function that would return a schedule.
+We could create a new class or a schedule.
+Something that's cool in Python is called namespace which is like a struct in C,
+lets us wrap up a bunch of keys and values as if it's an object.
+JH coded a simple namespace which contains our Alphas, Alphabars, sigmas, for our normal beta Max access 0.02.
+
+There's another paper with an alternative approach which is cosine schedule 
+where we set Alphabar equal to t as a fraction of Big T times pi over 2 cosine of that squared.
+If we make that our Alphabar we can reverse back out to calculate what Alpha must have been, 
+and so we can create a cosine schedule.
+A cosine schedule is better than a linear schedule, so lets compare them.
+All that matters is alphabar, the total amount of noise that we're adding.
+In ddpm when we do noiseify it is alphabar that we use.
+Printed those out plotted those for a normal linear schedule and cosine schedule.
+The linear schedule is bad, it's got a lot of time steps where it's basically zero, and we can't do anything with zero.
+The cosine schedule is nice and smooth, not as many steps nearly zero or nearly one.
+Was inclined to use the cosine schedule, but realized it is easy to get rid of the big "flat bit", by just decreasing betamax.
+
+The slope of these curves indicates how much things are stepping during the sampling process.
+The slope of the cosine slope is a nice smooth curve, but the linear slope is just a "disaster".
+
+The change of `betaMax=0.01` gives nearly the same curve as the cosine.
+Why everybody always uses 0.02 as a default?
+Spoke to Robin who is one of the two lead authors on the stable diffusion paper.
+They experimented and noticed that a decreased betaMax got better results.
+Stable diffusion uses betaMax 0.012, but it's certainly a lot better than the normal default.
+They have a magical factor of 0.1802 to scale the latents which also is reducing the range of the inputs.
+We both independently discovered this idea.
+Here's the curves are also pretty close so we would like to change as little as possible,
+so we keep using a linear schedule but change betamax to 0.01. for the next version of ddpm.
+
+A linear schedule `betaMax=0.01` to avoid changing any of the code.
+Then just put those in the same variable names that we've always used so that noise is the same as always.
+We repeat everything as before, and now a batch of data has more recognizable images.
+This is encouraging, previously almost all images have been Pure Noise which is not a good sign.
+Now we train it the same as ddpmv2, in notebook 19_ddpmv3, and save the model as 
+`torch.save(learn.model, mdl_path/'fashion_ddpm3_25.pkl')`
+Also, as it was going well, doubled the sizes all the channels from v2, increased the number of epochs to 25, 
+to make a bigger model trained for longer.
+`sample` is the same, we create 512 generated samples, and they look great, we couldn't recognize them from the real ones.
+
+Now we can test them, so we load up the aug2 model, delete the last two layers,
+pass that to imageEval and get a FID for our samples of 8.
+Chose 512 because that's our batch size so then we can compare with the FID for the actual data at 6.6.
+This is a FID that is nearly as good as real images.
+In terms of image quality for small unconditional generated sampling we're "done".
+
+Now, can we make it faster at the same quality? 
+We call the sample loop 1000 times, i.e., we're running the model 1000 times, 
+and most of the time we just move a tiny bit, so the model is pretty much the same, 
+as the noise being predicted is very much the same.
+Let's only call the model every third time, and also the last 50 times to help it fine tune.
+This is approximately 3 times faster, samples look basically the same, and FID is 9.78 versus 8.1, within the normal variance.
+We have to run this a few times or use bigger samples to validate.
+It is showing that we probably don't need to call the model 1000 times.
+
+Another "slightly weird" thing is to create a different schedule for how often we call the model.
+`sample_at = {t for t in range(n_steps) if (t+101)%((t+101)//100)==0}`
+For the first few time steps, just do it every 10 and then for the next two every nine,
+and then the next few every eight, and so forth.
+And just for the last hundred do it every step.
+It makes it faster, the FID is worse, but still not bad.
+We can create extremely high quality samples using DDPM.
+
+DDIM
+The best and most popular paper for doing it faster is DDIM, so we switch to notebook 20_DDIM next.
+We are not going to retrain our model, as with these sampling approaches we don't retrain the model.
+The model knows how to estimate the noise in an image, we call it multiple times to denoise using iterative refinement.
+DDIM is a another way of doing that.
+We use first the existing DDIM in diffusers, to make sure everything works.
+Then we try and re-implement DDIM from scratch, more concise than the diffusers version, and we can later modify it.
+When there's an existing implementation that works, that is the right method to use.
+We created a class called `UNet`, which passed the tuple of x's through as individual parameters and returned the `.sample` 
+As this comes from diffusers and we want to use the diffuser schedulers,  
+it wants the `x` as a tuple and it expects to find the `.sample`.
+
+"Crazy": when we save this model as a pickle file `.pkl`, it doesn't know anything about the code, 
+it just knows that it's from a class called UNet.
+We can "lie" and say that class called `UNet` it's actually the same as the `UNet2DModel` with no other changes.
+Python doesn't know or care.
+We can now load up the `fashion_ddpm3_25.pkl` model and it's going to use this UNet.
+Here it's useful to understand how Python works behind the scenes.
+We've got a model which we've trained, but it's not gonna use the `.sample` on this.
+That means we can use it directly with the Diffusers schedulers.
+We start by repeating what we already know how to do, use the DDPM scheduler so we have to tell it what beta we used to train.
+
+We can grab some random data and we're going to start at time step 999.
+We create a batch of data `t_batch`, and then predict the noise.
+This is the way diffuser DDIM works:
+we call `sched.step` and that' calculates `x_t` given noise.
+To `sched.step` we pass in `x_t`, the timestep `t`, and the `noise`, and it returns a new set.
+We ran that as usual, first cell by cell to make sure we understood how it all worked,
+then copied those cells and merged them together and chuck them in a loop.
+Is now going through all the timesteps, there's a progressbar to see how we're going,
+get the noise call step and append so this is just ddpm but using diffusers.
+
+Not surprisingly it gives us the same results as we got from our own DDPM.
+We can now use the same code we've used before to create our image evaluator.
+JH decided to go up to 2048 images at a time, a size that is big enough but is reasonably stable,
+We're now down to 3.7 for our FID and the data itself has a FID of 1.9.
+Shows that our DDPM generated samples are nearly unrecognizably from real data using its distribution of those activations.
+
+Now we can switch to DDIM by the same scheduler.
+With DDIM we can say we just want to do 333 steps to every third, a bit like the `sample_skip()` of doing every third. 
+DDIM does it in a smarter way. 
+Here is the same code as before but we put it into a `diff_sample()` function.
+We pass-in the `model`, the size `sz`, the scheduler `sched`, and then there's a parameter called `eta`,
+which is how much noise to add.
+Just add all the noise. 
+This is going to be 3 times faster and the FID is basically the same.
+We're down to 200 steps FID is basically the same, 100 steps and the FID is getting worse, then 50 steps, 25 steps.
+Interesting when we get down to 25 steps, they're too smooth, they don't have fabric swirls,
+buckles, logos or patterns as much.
+We can still get something out fast but that's how the images quality suffer.
+
+How does DDIM work?
+DDIM makes things a lot easier than DDPM.
+There is basically an equation from the paper.
+Grabbed the sample function from there and split it out into two bits:
+`sample` is the bit that says what are the timesteps `tsteps`, creates that random starting point `x_t`.
+It loops through: finds what my current `abar_tl` is, 
+gets the `noise`, and then does the same as sched.step,  it calls some function `f`.
+This allows us to create different steps.
+
+We go to the DDIM tip and took the second equation from the paper and turned it into code.
+It is confusing, as the notation here is different than DDPM: what DDPM calls Alphabar this paper calls Alpha.
+We've got here `x_t` minus an expression `bbar_t`, which is `1 - Alphabar`.
+`bbar.sqrt` times `noise` (`noise` is the neural net).
+We've got my next `x_t`, `bbar_t1` square root times this.
+The formula calls this "predicted x0", plus `bbar_t1 - Sigma squared`, square root.
+Again here's noise and that's the same thing as there, and then plus a bit of random noise
+which we only do if you're not at the last tip.
+
+We can call that for 100 steps, skip every 10 steps, so do 10 steps at a time, so it's going to be 100 steps.
+This did a bit better for the hundred steps.
+We can now run 2048 samples in under a minute, and get a pretty good measure of how we are doing in a reasonable amount of time.
+The difference between a FID of 5, 8 and 11 it is hard to tell.
+For fashion MNIST FID is better than human eyes as long as we use a consistent sample size.
+
+J: That screenshot from the paper and then the code that closely follows it, makes a huge difference.
+Issues such as the fact that it's called Alpha in the DDM paper and alphabar elsewhere.
+Spending that time for two screenshots from equation 14 and 16 from the paper,
+and put them in there and rewrite the code with some comments.
+
+Building this stuff in notebooks is great for the next engineer to come along and work on that.
+We can see the equation right there, add rows and stuff, 
+NBDev works particularly well for this kind of development.
+
+Tanishq:
+Each paper has a different notation, everyone tries to come up with their own Universal notation, and
+it keeps proliferating. 
+The paper that JH implemented was the "Denoising Diffusion Implicit Model".
+We'll bring up some of the important equations and compare and contrast with DDPM.
+The DDIM notation and equations are easier to work with than DDPM, hence many people prefer to use DDIM. 
+Both DDIM and DDPM have the same predicted denoised image equation, which the model is predicting.
+It is also passed-in the timestep and it is predicting the noise in the X(t) of our noisy image.
+We are trying to remove the noise, that is what this one minus this whole term here is: remove the noise.
+The noise that we're predicting is unit variance noise, so we have to scale the variance 
+of the noise appropriately to remove it from our noisy image.
+And we subtract it out of the original image to get a predicted denoised image.
+
+JH: We have to arrive to this one before by looking at the equation for XT in the noiseify function 
+and rearranging it to solve for X0.
+
+Instead of noiseifying it, where we start with X0 and some noise and get an XT,
+we're doing the opposite, where we have some noise, we have XT, and want to get X0.
+This equation is the predicted x0, the predicted clean image, the same for both ddpm and ddim.
+But the distributions are different.
+if we have xt,  our current noisy image, and x0 the "clean" image, can we find an intermediate noisy image, X(t-1).
+We have have a distribution that tells us how to get such an image.
+In ddpm they divide some distribution and explain the math behind it.
+They have some equations, a gaussian distribution with a mean and variance,
+in interpolation form between the original clean image and the noisy image, the intermediate slightly less noisy image.
+Given a clean image and a noisy image we get a slightly less noisy image.
+The sampling procedure of ddpm is to predict the x0 and then plug it into this distribution to give 
+the slightly less noisy image.
+
+Drawing showing a one-dimensional example in 2D space.
+Given a point which represents an actual image that we want to sample from.
+The line represents the distribution of where the actual images would lie, and we want to estimate this.
+The algorithm is that if we take a random point that we choose when we start,
+learned this score function to take us to the manifold.
+But it's only going to be accurate in some space.
+So we get an estimate of the score function that gives the direction to move in to predict the denoised image.
+
+Let's say the score function (a gradient) is some curve that points to here.
+We are not minimizing but maximizing the score, so it is "Ascent", to 
+maximize the likelihood of that point being an actual data point that we want to go towards it.
+When we estimate Epsilon Theta and predict our noise we are getting the score value here.
+We follow it to some point, (exaggerating here) a point that represent X0_hat, 
+that is not an actual point, it would be next to the distribution.
+It's not a good estimate at the beginning, and we follow it to some place.
+Then we want to find a x(t-1), that's what the 2nd distribution tells.
+It takes us back to some point here, and now we can re-estimate the score function (gradient), and do a prediction of noise.
+It may be more accurate, getting us closer to the true line.
+Then we re-estimate and get another point, follow it, etc. 
+That is the iterative process where we're trying to follow the score function to our own point.
+We first have to estimate x0_hat and then and then add back some noise, get another point, get a new estimate, and keep estimating.
+That is what we're doing in DDPM in two steps, x0_hat and then we have this distribution.
+
+Broken in two steps is clearer, the DDIM paper really clarifies that, especially in their update equation.
+J: We use the prediction to make a step but also add back some additional noise
+that's always fixed, `edpm` there are no parameters to control how much extra noise to add back at each step.
+
+We won't be exactly at this point, but in the general vicinity.
+Adding that noise helps to (avoid falling?) into specific modes where it is the most likely data point.
+We want to add some noise to explore other data points in the vicinity.
+It is something that we can't control with ddpm and DDIM exposed in terms of the noise 
+and trying to get rid of the noise all together.
+The DDIM paper main difference is one equation, changing the distribution where we predict the less noisy image.
+
+We have an additional parameter now, Sigma that controls how much noise is going to be part of this process.
+We can set Sigma to zero and then we have a 0 variance, and this becomes a deterministic process.
+It is called DDIM because it can be made deterministic.
+The math works out where the same model objective would work well with this distribution.
+We have a new parameter that controls the stochasticity of the of the model, and still uses the same trained model.
+It is a new sampling algorithm, nothing new with the training itself.
+Given the DDIM equation, we can rewrite the x(t-1) term, and we're doing the same split, 
+predicting the x0 and then adding back direction pointing towards x(t). 
+An add a bit of noise with an extra term where sigma controls that.
+We need to look at the DDIM versus the ddpm equations.
+We have to be careful of the alphas, in DDIM they are referring to Alphabars in the ddpm equation.
+If we set sigma(t) to a given value (see paper) it will give back ddpm.
+
+Sigma is equal to Eta times this coefficient so with ETA=1 it becomes regular ddpm.
+J: We could pass in Sigma that controls the amount of noise as an argument.
+But for convenience define Eta where 0 means Sigma=0 (we should look at the equation that works)
+ETA=1 means we match the amount of noise that's in ddpm.
+This gives a nice slice where Eta can equal anything, but it is a meaningful unit of 
+one equals the same as this previous reference work.
+JH: It is also convenient because it's Sigma(t), i.e., different time steps,
+unless we choose ETA=0 in which case it doesn't matter.
+Different time steps probably want different amounts of noise so this is a reasonable way of scaling that noise.
+
+Finally, to be able to do rapid sampling.
+We can define a similar distribution, where we have some subset of diffusion steps.
+It uses the Tau variable.
+For example for a subset of diffusion steps, 10 diffusion steps, then Tau(1)=0,
+Tau(2)=100, ..., all the way to Tau(10)=1000, and we get 10 diffusion steps.
+That is what they're referring to with the Tau variable.
+We can do a similar equation and derivation to show that this distribution meets the objective used for training.
+We can now use this for a faster sampling, where we select the appropriate alphabar.
+We have this distribution and then we have to select the appropriate Alphabars.
+It follows the same in terms of an appropriate sampling process.
+It makes it a lot simpler for accelerated sampling.
+
+JH: the key is that in this equation we just have one one parameter which is the alphabar or Alpha 
+depending which notation, and had everything else being calculated from it.
+We don't have what ddpm calls the alpha or beta anymore, it is more convenient for smaller number of steps, 
+because we can jump straight from timestep to alphabar.
+The cosine schedule allows us to calculate the inverse of the cosine, i.e., we can also go from an alphabar to a t.
+It is easy to find what would Alphabar be N timesteps previously to this one, just call a function.
+The original cosine schedule paper had to fuss around with various Epsilon style small numbers 
+that they add to things to avoid getting numerical problems.
+When we only deal with Alphabar all that stuff goes away.
+The DDIM code is simpler code with less parameters than the ddpm code, it's faster and more flexible.
+
+The idea of controlling stochasticity is interesting to explore further, deterministic versus stochasticity.
+Also the sigma in that middle equation, sigma(t)*epsilon(t), adding random noise.
+If we're adding random noise, we would need less as we move back towards XT which is the noisy image.
+We also got the `1 - alpha(t-1) - Sigma squared and then, we take the square root, so basically it is just Sigma. 
+We are subtracting Sigma(t) from the direction pointing to x(t) and adding it to the random noise.
+There is a reason for everything in the equation. 
+The predicted x0 equation we derived previously, and it remains the same in (most) diffusion model methodology.
+We will talk about places where it's going to change next week.
+
+We can now predict classes for fashion MNIST,  we can do stable diffusion sampling and UNets 
+(except for the UNet architecture) for unconditional generation.
+We can generate fashion mnist samples so they are unrecognizably different to the real samples.
+DDIM is the scheduler that the original stable diffusion paper used.
+We are about to go beyond stable diffusion for our sampling and UNet training. 
+We are meeting our stretch goals so far, all from scratch, with weights and bias experiment logging.
+To have fun have a little callback that instead logs things into a sql database,
+and then you could write a little front end to show the experiments.
+Also send you a text message when the loss gets good enough... 

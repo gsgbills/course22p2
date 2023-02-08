@@ -1,0 +1,628 @@
+L20 Part 2 Jonno. Notebook 16A
+
+We explore what else can we do with miniAI besides classic classification, or where we have some inputs and a label.
+First style transfer, i.e., to create an artistic combination of 2 images 
+with the structure and layout of one image and the style of another.
+This is actually useful beyond just making pretty pictures.
+We have a couple of URLs for images (TODO: try this notebook with different images). 
+We download the image and load it as a tensor as a 3 Channel 256x256 pixels.
+Since we've seen how to download before, so we use  fc.urlread.
+This is the base image that we're going to start working with.
+
+The goal is to do some training or optimization, to match some aspect of this image.
+We start from a random image and optimize it until it matches pixel for pixel exactly.
+JH: Type "style transfer deep learning" into Google Images to see examples, e.g.,
+Mona Lisa as base and applied different artistic styles.
+We want to take the overall structure and layout of one image and the style from a different reference image.
+A previous FastAI student did a different way of doing style loss.
+
+First step is being able to optimize an image.
+Until now we optimized the weights of a neural network, now we want to optimize the raw pixels of an image.
+We will not write our own jpeg parser, using torchvision.io.decode.image, which is faster than PIL,
+but it is difficult to find examples of how to use it.
+
+We don't have a dataset with training examples, just have a single target and a single thing we're optimizing.
+We define a `LengthDataset()` class to follows the dataset standard.
+We define `__getitem__` to return 0 0, as we do not care about the content of this "dataset".
+We just need something that we can pass to the learner to do a number of training iterations.
+We define a fake dummy dataset loader `get_dummy_dls(length=100)` with a hundred items.
+It creates the dataloaders and gives us a way to train for a number of steps.
+
+We want the image to look like that lady, and change the style to match the style of another picture.
+In the optimization loop, each step will be moving the style closer, so we loop through steps of optimization 
+(not thru different images).
+We can create a dataloader.
+We define `Tensor Model` class which just has the tensor we pass in as its parameter.
+There is no actual neural network.
+We pass-in a random image or some image shaped tensor, a set of numbers that we can then optimize.
+
+Putting something in an `nn.Parameter` doesn't change it in any way.
+It is just a normal tensor, but it is stored inside the module as being a tensor to optimize.
+We're not optimizing a model, we're optimizing the pixels of an image directly.
+Because it's in a parameter, e.g., `model.t` has `require_grad` already set up,
+as the `nn.Module` is going to look for any parameters.
+
+The shape of the parameters that we're optimizing is the same shape as the image.
+That tensor will be optimized if we pass it into a learner fit method.
+This model has an argument (`x=0`) passed to forward, which we ignore.
+We just make it easier ourselves by making the model look the way our learner expects.
+
+Alternatively, we could use e.g., `TrainCB`, set it up with a custom `predict` method that 
+calls the model forward method with no parameters, calling the loss function on just the predictions.
+But if we want to skip this, as we take `x=0` and never use it.
+That should also work without this callback, either way is fine.
+A good approach given an existing model which expects some number of parameters,
+is to modify the `TrainCB` callback, but we don't need to in this case.
+
+Let's put this in a Learner and optimize it with some loss function.
+To clarify: `get_loss` had to change because normally we pass a Target to the loss function.
+Let's learn our grids and then `learn.batch`.
+We could remove that if we wanted to have the loss function take a target that we then ignore.
+
+We modify the training callback in the DDPM example, (ImageOptCB), just 2 lines change.
+To get our model predictions we call the `forward` method which returns an image that we're optimizing.
+We evaluate this according to a loss function that just takes in an image.
+For the first loss function `loss_fn_mse` we use Mean Squared Error between the image that we are generating (output of the model)
+and the content image that is our target.
+
+We set up our model and start it with a random image like the one above.
+We create a learner with a dummy dataloader for 100 steps, `loss_fn_mse` as the loss function, an `lr` and  `optim.Adam`.
+(default optimizer probably works fine).
+We run it and the loss goes from a non-zero number to close to zero.
+We look at the final result (call learn.model) and show it as an image and compare it with the source input image.
+They look identical.
+JH: To clarify: this is a pointless example, we started with a noisy image and used SGD to make the pixels get closer 
+to the source image, just to show that we can turn noisy pixels into something else by having it follow a loss function.
+This loss function makes the pixels look as the source image.
+It's a very simple loss a one Direction that you update, almost trivial to solve, just helps us get the framework in place.
+
+Just seeing this final result is not very instructive because maybe is a bug in the code that just duplicated the image.
+So we need to have a way of observing progress. 
+We define a login callback `ImageLogCB` that after every batch is going to store the output as an image.
+Every `log_every` iterations it's going to append the current image in a list, to be shown after the training.
+All else is as before but passing in `ImageLogCB` callback it will give us the kind of progress.
+Now we can see what is happening, starting from noise after a few iterations already most noise is gone.
+And by the end of this process it looks exactly like the content image.
+By now we have the infrastructure in place to create a variety of interesting outputs, either artistic or
+image reconstruction, super resolution, colorization, etc.
+We just have to modify the loss function, first created the easiest, checked it before we start doing "fancy" stuff.
+Now we will see if things are going wrong, and we know what we need to modify.
+
+We can now express some desired property that's more interesting than just MSE to a target image.
+Maybe we want to match an image but also have a particular overall color, or something more complicated.
+To get a richer measure of what this output image looks like, we extract features from a pre-trained network.
+This is the core idea of this notebook: 
+We feed in an image, then have downsampling convolutions with Max pooling until some final prediction.
+JH: there's a big difference: that 7x7x512 nowadays we use Adaptive or Global polling to get down to 1x1x512.
+Vgg16 is unusual (by today's standards), as it just flattens that out into a 1x1x4096.
+This might be an interesting property, people should consider training resNets without global pooling and instead do flattening.
+We don't do flattening nowadays because that very last linear layer from 1x1x4096 to 1x1x1000 is for an imagenet model.
+It is going to need a big weight Matrix, 4096x1000, thus very memory intensive for a poor performing model by modern standards.
+But, doing that potentially has some some benefits.
+
+In this case we are not interested in classification.
+We use the capacity of this network to extract different features.
+Re: The classic Xyler and Fergus article looking at what ANNs learn, trying to visualize some of these features.
+The early layers pick up simple features, edges, shapes, textures, and those get mixed together into more complicated textures.
+This visualizes what input maximally activates a particular output on each of these layers, a good way to see what it is learning.
+As we move deeper into the network we get more complex, hierarchical features.
+This is a more modern version of the Xyler and Fergus paper.
+NB: names of people that are worth following, Chris on interpretability, and Alexander Mortinsev (in the 16B notebook).
+
+Let's extract the outputs of these layers to get a representation of the image that is richer than just the raw pixels.
+If we are able to change our image to have the same features, similar textures, or higher level concepts.
+For example, a 14x14 feature map may be capturing that there is an eye in the top left, and some hair on the top right.
+If we change the brightness of the image it's unlikely that it may change what features are stored,
+as the ANN learned to be somewhat invariant to these transformations.
+A bit of noise, a bit of changing texture early on, it still thinks this looks like a dog.
+A few layers before a part looks like a nose, another an ear, etc.
+JH: interesting bits at the earlier layers, e.g., diagonal lines.
+Because if we replicate those we get similar textures without changing the semantics.
+
+Let's load the model, look at what the layers are and then in the next section
+we can see what kinds of images work when we optimize towards different layers in there.
+In the vgg16 network we have convolutions, RELUs, Maxpooling, etc, all one big nn.Sequential.
+It doesn't have the head so we said `.features` (so this is the features subNetwork).
+That's everything up until some point and then we have the flattening and the classification which we're throwing away.
+This is the the body of the network and we're going to tag into various layers and extract the outputs.
+
+vgg16 was trained on a normalized version of Imagenet, using the dataset mean standard deviation to normalize the images.
+To match what the data looked like during training we need to match that normalization step.
+We've done this on grayscale images where we just subtract the mean and divide by the standard deviation.
+But here these are 3 Channel RGB images, we can't just do that, we need to be more careful than with just a scalar value.
+The mean has 3 values, one for each RGB channel, as the content image has 3 channels 256x256. 
+If we just say content image minus the mean by broadcasting rules (from right to left...) 
+would try to match the 3 and the 256, so we get an error.
+More perniciously if the shape did happen to match, it might not be what we intended.
+We'd like to have the 3 channels mapped to the 3 channels of our image and then 
+expand those values out across the two other dimensions.
+For this, we add two additional dimensions on the right for our `imagenet.mean`.
+(We  could also do `.unsqueeze(-1) but this is syntax that we're using in this course.)
+Now the shapes match, from right to left, if it is a unit dimension it expands it to match the other tensor.
+(If it is a non-unit dimension then the shapes have to match, and it looks like it's the case.)
+
+With this reshaping operation we define a normalized function which we can then apply to the content image.
+We check their min and max to make sure that they make sense, and check the mean to see that it is somewhat close to zero.
+The Blue channel is brighter than the others and indeed it is in the image.
+As we've implemented it, we can use torchvision.transforms which has a normalized function.
+We pass the mean and standard deviation and it's going to make sure that the devices match, that the shapes match, etc.
+The Min and Max are the same, i.e., our function does the same as the torchvision normalized transform.
+
+[calc_features]
+To extract the features from this network we are going to normalize our inputs `inps`and then we
+run through the layers one by one in this sequential stack.
+And we're going to pass `x` through that layer, and if we're in one of the specified target layers,
+we store the outputs of that layer.
+
+The term *features* here means the activations of a layer, in this case two particular layers 18 and 25.
+NB: There's a problem (Python?/Pytorch?) using a list as a default, so we need to use tuples.
+When we use a mutable type like a list in a python default parameter it keeps it around.
+And if we change it later then it modifies the function.
+Suggest never using a list as a default parameter because at some point it will create weird problems.
+
+We could do this by adding hooks to the specific layers and just feeding our data through the whole network 
+at once and relying on the hooks to store those intermediates.
+TODO: homework make use of the the hooks callbacks or the Hooks context manager, or register a Pytorch forward hook.
+
+We're feeding in an image that's 256x256 and the first layer that we're looking at is (18).
+It's getting half to 128 then to 64. 
+(The ones in the VGG diagram are different because they have a different starting size.)
+And then to 32x32x512. 
+Those are the features for that layer 18, it's a tensor of shape 512 by 32 by 32.
+For every spatial location in that 32 by 32 grid we have the output from 512 different filters.
+Those are the "features" that we're talking about (the channels in a single convolution).
+We want to capture different concepts at different layers.
+To get a feel for this we compare these feature Maps, we institute a "Content loss" also called a "perceptual loss".
+We focus on a couple of later layers, pass in a target image `target_im`, eg the content image,
+and we calculate those features in those Target layers.
+In the forward method `__call__` when we're comparing to our inputs we calculate the features of our inputs 
+and do the mean squared error between those and our Target features.
+
+`ContentLossToTarget` is a loss function which has a `__call__` method (a Python "callable").
+(In a Module we call it forward but in normal python we just use `__call__`.)
+It's taking one input `input_im` which is the way we set up the image training callback earlier.
+It's just going to pass in the input which is this image as it's been optimized to so far.
+Initially it's going to be random noise, and then the loss we are calculating is the MSE
+of how far away is `input_im` from the target image `target_im`.
+The MSE for each of the layers (default 18 and 25).
+I's a bit weird we're calling a different neural network not because that's the model we're optimizing,
+but because it's the loss function it's how far away are we.
+If we SGD optimize that loss function we are not going to get the same pixels 
+we're going to get some pixels which have the same activations of those features.
+
+We run it and can see the shape of the source image, but it doesn't match on a color and style basis.
+18 and 25 are fairly deep (there are 31 layers).
+Color often doesn't have much of a semantic property, hence it doesn't care much about color,
+e.g., it's still an eyeball whether it is green or blue.
+
+We aren't constraining the tensor that we're optimizing to be in the same bounds as a normal image,
+so some of these may also be <0  or >1. 
+We are almost hacking the neural network to get the same features that those deep layers have 
+by passing in something that it's never seen during training.
+For display we're clipping it to be an image,
+but we may want to have either some sort of sigmoid function or some other way to clamp 
+the tensor model and to have outputs that are within the allowed range.
+Notice that the background hasn't changed much, because the VGG model was trained on Imagenet,
+which is good at recognizing a single big object like a dog or a boat.
+But it's not going to care about the background, as the background isn't going to have much in the way of features.
+
+Interesting to see how little it looks like the image, at the same time we can recognize it.
+We can also try passing-in them earlier list and comparing on those earlier layers and
+get a different result because now we're optimizing to some image that is a lot closer to the original.
+Still it doesn't look the same, so there are a few things that are worth noting.
+We're hooking into these RELU layers which might mean,
+for example, that if we are looking at the very early layers we're missing out on some features.
+That is a guess as to why this didn't have as dark as the input image.
+Also we might be going out of bounds to get the same kinds of features.
+
+By looking at really deep layers we really don't care about the color or Texture, just getting e.g., sunglasses bits. 
+By looking at the earlier layers we have a more rigid adherence to the the lower level features.
+This gives us a tunable way to compare two images.
+If we care that they match exactly on pixels, we can use MSE on early layers.
+If we only care about the overall semantics we can go to deeper layers and we can experiment with.
+
+This is like the technique that Xyler and Fergus and the distilled papers use to identify what do filters look at. 
+We can optimize an image to maximize a particular filter. 
+For example that would be a similar loss function to the one we've built here.
+TODO: fun project: calculate these feature maps, pick one of the 512 features, and optimize the image to maximize that activation.
+By default we might quite a noisy weird result like almost an adversarial input.
+"Feature Visualization" people add things like augmentations.
+So we are optimizing an image that under some augmentations still activates that feature.
+
+We know how to optimize an image, how to extract features from this neural network,
+for comparing at different types of features how similar two images are.
+For a full style transfer artistic application we need to keep the structure
+of the source image, and have the style come from a different image.
+
+If we look at the early layers, the feature maps have a spatial component.
+We had a 32x32x512 feature map, each of the locations in the 32x32 grid correspond to some part of the input image.
+If we just do Mean Squared Error for the activations from some early layers,
+that would be asking for the same types of features (eg., style, textures) in the same location.
+We can't just get another style (e.g., Van Gogh brush strokes), we want to have the same colors/textures in the same place.
+
+We want an image that matches the source image, with the same colors and textures as the style image,
+but they may  be in different parts of the image, i.e., we want to get rid of the spatial aspect. 
+For example, give us the image in the style of Van Gogh Starry Night.
+We're not asking that in a part of the image there should be something with this texture.
+We're asking hat the kinds of textures that are used anywhere in that style image should
+also appear in in our version, but not necessarily in the same place.
+The solution that Xyler and Ferguson proposed uses a Gram Matrix.
+We want a measure of what kinds of styles are present without worrying about where they are.
+
+It is difficult to represent more than two-dimensional things on a 2d grid.
+The feature map has a height and width that might be 32x32,
+and a number of features (a 3rd dimension) represented as colored dots.
+With a Gram Matrix we flatten out the spatial Dimension.
+We reshape it to have the width times the height, 
+the spatial location on the horizontal axis and the feature dimension on the vertical axis.
+Each row (e.g, yellow) has a 1 if there is a corresponding (eg yellow) dot in the location else it gets a 0.
+Once we flattened out the feature map into a 2d grid, instead of caring about the spatial dimension, 
+we only care about which types of features we have and do they occur (correlate) with each other.
+We get the dot products of each row with all other rows, to see these feature vectors how correlated are they with each other.
+REFERENCES: Style transfer was first invented in the Gattys paper.
+
+We end up with a Gram Matrix with a correlation of features.
+We can read this example as: there are 7 Reds in total, only one red occurs alongside a green (only location).
+The Gram Matrix has no spatial component, it's just a feature Dimension by feature Dimension.
+It has a measure of how common these features are (eg an uncommon one is green),
+and how frequently they occur together with other features.
+
+Lets open the original paper and use Jono's explanation to understand the paper, which has some nice pictures. 
+Gram Matrix inner product between the vectorized feature map, but it doesn't explain how the Gram Matrix works.
+People have used Gram Matrices in other contexts for similar kinds of measures.
+Pytorch has named parameters, we can name layers of a sequential model.
+
+Wanted to implement this diagram in code, 0 or 1 for simplicity, but we could have different size activations.
+The correlation idea is still going to be there, just not as easy to represent visually.
+We use an einsum because it makes it easy to add later the (Bastion?) engine.
+It is this Matrix multiplied with its own transpose.
+We get the same result, so that is the Gram Matrix calculation.
+We can now use it to create a measure and when we look at things like word2Vic, it's got some similarities.
+The idea of co-occurrence of features also reminds me of the clip loss.
+It is a dot product ut in this case with itself.
+The idea of multiplying with your own transpose is a common mathematical technique, used in many areas, e.g., protein folding.
+The difference in each case is the Matrix that we're multiplying by its own transpose.
+For covariance the Matrix used is the Matrix of differences to the mean.
+In this case the matrix is the flattened picture.
+
+`calc_grams` will do that operation we did above, but we're going to add some scaling,
+because we have a feature map and we might pass in images of different sizes.
+
+As there's a relation to the number of spatial locations, by scaling by this width times height
+we get a relative measure as opposed to an absolute measure.
+Hence the comparisons are going to be valid even for images of different sizes.
+We have a `chw, dhw ->cd` (channels/features by height by width image).
+we pass-in two versions of `x` because it's the same image in both times.
+And we map this down to just features by features.
+We can't repeat variables in einsum so that's why it is`c` and `d`.
+If we run this on our style image we can see we are targeting 5 different layers.
+For each one the first layer has 64 features and so we get a 64 by 64 gram Matrix.
+The second one is 128 features so we can hit 128x128 gram Matrix, etc.
+
+We use the `attrgot` method (it is a `fc.L` "magic list"), 
+Let's use `StyleLosstoTarget()` as a loss just like with the content lost before,
+we're going to take in a Target image which is going to be our style,
+calculate the Gram matrices and when we get an input to our last function.
+
+We calculate the Gram matrices for that and do the MSE between the gram matrices.
+These have no spatial components just what features are there.
+Comparing the two to make sure that they have the same kinds of features,
+and the same kinds of correlations between features.
+
+We set that up and evaluate it on our image.
+Our content image at the moment has a high loss when we compare it to our style image.
+That means the physical content image doesn't look anything like a spider web in terms of its textures, etc. 
+We set up an optimization. 
+One difference is that now we are starting from the content image itself  rather than optimizing from random noise.
+Either way for style transfer is OK, but it's nice to use the content image as a starting point.
+At the beginning it looks like our content image, as we do more steps we maintain the structure, 
+because we're using the content loss as one component of our loss function.
+And we also have more of the style because at the early layers we're evaluating the style loss.
+It doesn't have the same layout as the style image, but it has the same kinds of textures and structures there.
+The final result accomplished the goal of taking an image and do it in the style of another.
+Notice that the spider web is nicely laid out, she's almost picking it out with her fingers.
+Also, very important in terms of object recognition, the model didn't mess with the face.
+It is impressive how it's managed to find a way to add spider webs without messing up the overall semantics of the image.
+
+TODO: find pictures from Creative Commons images to try bashing together, at a larger size, higher resolution style, etc.
+Experiment with: for example, change the content loss to focus on, 
+maybe an earlier layer can start from a random image  instead of a content image.
+Or we can start from the style image and optimize towards the content image.
+We can change how we scale these two components of the loss function, how long to train for, the learning rate, etc. 
+What you can optimize and what you can explore, get different results with different scalings and different focus layers...
+A lot of experimentation to find a set of parameters that gives a pleasent result for a given style content pair,
+and for a given effect on the output.
+
+T: Interesting how old VGG works, may be worthwhile to play with other networks, as some special properties of vgg 
+that are good for style transfer.
+There are a few papers that explore how to use other networks for style transfer that maintain some of the properties of VGG.
+It could be interesting to explore these papers, and we have a framework that allows us to Plug and Play different networks.
+JH: taking a convnet or a resnet, replacing its head with a VGG head would be interesting to try.
+On the experimentation version, we're doing all this work setting up these callbacks.
+We just have an image that we are optimizing, set up an Optimizer, a loss function, and an optimization Loop.
+It is easier when we want to do it once.
+In a tutorial we keep it as minimal as possible, just show what style loss is...
+But when we want to try it again, adding a different layer, add some progress stuff, etc., it gets messy quickly.
+As soon as we want to save images for a video and mess with the loss function, do some sort of annealing on the learning rate, ....
+Each of these things is going to grow this loop into something messier.
+It is good to quickly experiment with a completely new version with minimal lines of code, minimal changes, 
+having everything in its own piece like the the image logging.
+Or to make a movie showing the progress that goes in a separate callback.
+To tweak the model we're just tweaking one thing, all the other infrastructure can stay the same.
+
+JH: When using the fastAI library people jump straight into Data blocks.
+But they may be working on a custom thing where there isn't a data block already written for.
+Step One is lets write a data block, and that's not easy.
+Would be better to focus on building a model.
+JH tells people to go down a layer of abstraction.
+JH doesn't often start at the lowest level of abstraction,
+because he does not do it right, e.g., forget zero_grad or I'll mess up something, especially if 
+he wants to have it run reasonably quick.
+Using fp16 mixed Precision, got to think about how to put a metrics in so they can see it's training properly.
+So he doesn't often go to that level, but start at a reasonably low level.
+With miniAI we understand all the layers and there are few. 
+We could write our own e.g., trainCB, and it ensures to use torch.nograd, and to put it in a Val mode, etc.,
+and it will be done correctly.
+We can run a learning rate finder, run on Cuda, etc.
+We can have "our own"  framework where there are multiple ways of doing the same thing.
+For example, Jonna showed with the imageOptCB callback can be implemented in different ways.
+
+Using these pre-trained networks as smart feature extractors is powerful.
+Unlike the "fun crazy" example that we're going to look at, they also have very valid uses.
+For example, for super resolution or even something like difusion,
+adding in a perceptual loss or even a style loss to the target image can improve things. 
+We've played around with using perceptual loss for diffusion, 
+or even to generate an image that matches a face, image to image with stable diffusion.
+Maybe we have an extra guidance function to ensure that structurally it matches but maybe it actually doesn't.
+Maybe you want to pass in a style image and have that guide the diffusion process 
+to be a particular style without having to say the style name.
+For many image to image tasks, using the features from a network like vgg has many practical uses apart from artistic.
+
+XXXXXXXXXXXX
+Notebook 16_B
+Neural Cellular Automata
+We're going to use this kind of style loss "in an even funkier way" combining different fields which Jonno likes.
+In the classic cellular automata, e.g., Conway's Game of Life, there are independent cells.
+Each cell can only see its neighbors and there is an update rule.
+For example:
+if a cell has 3 neighbors it's gonna remain the same state for the next one,
+if it has only one neighbor it's going to die in the next iteration.
+It is a distributed self-organizing system where there's no global communication.
+Each cell can only look at its immediate neighbors and typically the rules are simple.
+We can use these to model these complex systems.
+This is inspired by biology where there are huge arrangements of cells, each of which is only seeing its neighborhood
+by sensing chemicals in the next to it, yet somehow they're able to coordinate together.
+
+For example, ant colonies are organized by little chemical signals that the ants can smell.
+Chemical trails being left are just like pixel values in some grid, the ants are tiny agents that have some rules.
+Slime molds are another example, they have some limited signaling.
+This kind of simulation produces patterns that look like emergent patterns in nature, e.g., ants moving to food or
+corals coordinating, etc.
+The difference with our cellular automata is that there's nothing moving.
+Each cell has its own little agent, there's no wandering around.
+Each individual cell looks at its neighbors and then updates.
+An "agent" is simple, e.g., a single if statement, if there are 2 cells around you get another one.
+A simple rule: If there's two or three nearby you stay alive and the next one if you're overcrowded 
+with four or five or there's no one near you with zero or one neighbors then you're gonna die.
+
+We will replace that hard-coded if statement with a very small neural network.
+The paper that inspired Jonn to look at this topic is by Alexandre Morvenserv and a team at Google Brain, who
+built neural cellular automata. 
+This is a pixel grid, every pixel is a cellular automata that's looking at its neighbors and can't see the global structure.
+It starts with a single black pixel in the middle.
+As we run the simulation it builds a little lizard like structure, like a little Emoji.
+A set of pixels that only know about their neighbors can create a large and sophisticated image.
+They can self-assemble into this pattern, and they are robust, able to repair damage.
+There's no global signaling, no agent chair knows what the full picture looks like.
+Each cell doesn't know where in the picture it is, all it knows that if neighbors have certain values 
+and to update itself depending on those values.
+
+JH: A set of pixels that only know about their neighbors can create a large and sophisticated image..
+That ought to have use in the real world, e.g., drones working together when they can't contact a central base,
+automated Subterranean rescue operations which can't communicate through thousands of meters of rocks,
+Self-organizing systems have a lot of promise for nanotechnology, and can do amazing things.
+The blog post linked "The future of artificial intelligence is self-organizing and self-assembling".
+That is a pattern that worked well in nature, loosely coordinated cells coming together..
+Talking about deep learning is quite a miracle, an interesting pattern to to explore.
+
+We want to set up a structure that can build an image or a texture and is robust and able to maintain that and keep it going.
+We set up a neural network (a little dense MLP) with some learnable weights that is going to apply the update rule.
+The inputs is the neighborhood of the cell, they sometimes have additional channels (not shown),
+that agents can use for communication with their neighbors.
+We can set this up in code, we'll get our neighbors using convolution or some other method,
+flatten those out and feed them through a little MLP, take the outputs, and use that as our updates.
+JH: To clarify this is not a simplified picture, this is it, e.g., 3x3 you're only allowed to see the
+little things right next to you or they can be in a different Channel.
+The paper has an additional step of cells being alive or dead,
+but we're going to do one that doesn't even have that, so it's simpler than this diagram.
+
+To train we start from our initial State, apply the network over some number of steps,
+look at the final output, compare it to our targets and calculate our loss. 
+We can do that, run this, and get something that after a number of steps can learn to grow 
+into something that looks like your target image.
+But there is a problem: we are applying some number of steps and then applying the loss afterwards.
+But that doesn't guarantee that it's going to be stable long-term.
+We need some additional way to say grow into this image AND maintain that shape once I have it.
+
+This paper proposes to have a pool of training examples. 
+Sometimes we'll start from a random state and apply some number of updates,
+apply a loss function, and update our Network.
+Most of the time we'll take that final output and we'll put it back into the pool to be used again 
+as the starting point for another round of training.
+The network might see the initial State and have to produce the lizard or it might see a
+lizard already being produced and after some number of steps it still needs to look like that lizard.
+This is adding an additional constraint, even after more steps we still want you to look like this final output.
+
+Initially the model ends up in various incorrect states that don't look like lizards, and also don't look like the starting point.
+Then it has to learn to correct those too.
+We get this additional robustness from this in addition and we now have a thing that 
+is able to grow into the lizard and then maintain that structure indefinitely.
+In the paper they do a final step where they sometimes chop off half of the image as an additional augmentation.
+
+JH: we could have a bunch of eg., drones, that can only see the ones nearby, they don't have GPS.
+A gust of wind could come along and set them off path and they can still reconfigure themselves.
+Half of them go offline and run out of battery that's fine.
+But this kind of training is a bit more complicated than "we have a network and some Target outputs and we optimize it".
+We are not going to follow that paper exactly, but it should be easy to tweak what we have to match that.
+We are doing a slightly different one by the same authors where they train even smaller networks to match textures.
+Our style loss is going to be useful here.
+We want to produce a texture without worrying about the overall structure, we just want the style.
+The same sort of training, start from random and then after some number of steps we'd like it to look like our Target style image.
+There is a spider web that makes a texture, i.e., something we can tile.
+Tiling is going to come almost for free.
+
+We have our input, look at our neighbors, feed that through a network and produce an output.
+Every cell does the same rule which will work fine by default if we set this up  without thinking about tiling.
+Except that at the edges when we do a convolution to get our neighbors,
+we need to think about what happens for the neighbors of the cells on the edge.
+Which ones should those be, and by default those will just be padding of zero.
+So the cells in the edge will know they're on the edge,  and they won't have communication with the other side.
+If we want this to tile, we set our padding mode to "circular".
+For example, the neighbors of this top right cell are going to be these cells next to it here.
+and the cells down in the bottom corner and then for free we're going to get tiling.
+
+Let's  download our start style image (TODO: experiment with our own) 
+We set up a style like in previous lesson, the difference is that we have a batch Dimension to the inputs to the `calc_grams()`,
+(before we were dealing with a single image), all else is the same.
+We can set up our `StyleLossToTarget()` class with the target image `target_im`, 
+and then we feed in a new batch of images, and we're going to get back a loss.
+We are setting up our evaluation, we would like after some number of steps our output to look like a spiderweb.
+Let's define our model with only 4 channels and number of hidden neurons `hidden_n` 8. 
+TODO: In `StyleLosstoTarget` have a vector of Weights that we could pass in and experiment.
+
+The "world" in which the cellular automata live is a grid.
+We're going to have some number of grids by calling `make_grids(n, sz=128)`.
+If we call this function with `n=` number of channels and the size (could make it non-square).
+For the perception in the diagram, we're going to use some hard-coded filters,
+but we could have these being learned, i.e., there would be additional weights in the neural network.
+They are hard-coded because the authors wanted to keep the parameter counts low, a few hundred parameters total.
+That is very low, they can do a lot with very few parameters.
+These filters that we hardcode are going to be the identity, just looking at itself.
+And a couple looking at gradients, inspired by biology, where simple cells can sense gradients of chemical concentration.
+We apply these filters individually.
+For example, the first one a 3x3 it's been visually flattened out but if we lay them out we can see it's a identity Matrix.
+
+One filter is going to sense a horizontal gradient, another a vertical gradient, and the final one is called the Sobo filter.
+We've got some hard-coded filters, we apply them individually to each channel of the input,
+and rather than having a a kernel that has separate weights for each channel on the input.
+
+JH: I didn't know circular was a padding mode.  
+It is going to circle around and copy in the thing from the other side when you reach the edge.
+It is useful for avoiding issues on the edges.
+Some implementations just deal with the fact that they have slightly weird pixels around the edge, and don't look into it.
+This is one way to deal with that.
+
+We can make a grid, apply the filters to get the model inputs to our little brain.
+Is going to be 16 inputs, 4 channels and 4 filters, for every location in the grid.
+We implement that little neural network as shown in the diagram with a dense linear Network.
+We set that up, we have a linear layer with number of channels by 4 which is the number of filters,
+as its number of inputs, some hidden number of neurons, a RELU 
+and a second linear layer that's outputting one output per Channel as the update.
+If we want to use this as our brain,  we need to deal with the extra dimensions.
+We use `einops.rearrange` to take our batch by Channel by height by width `b c h w` and we map 
+the batch, the height, and the width all to one dimension (b h w) and the channels `c` to the 2nd dimension.
+
+JH: I have not seen `einops.rearrange` before, let's add a bookmark to come back to a useful function.
+It is a little complicated because we have to rearrange our inputs into something that has just 16 features,
+feed that through the linear layer and then rearrange the outputs back to match the shape of our grid.
+We do that and see what parameters we have on the brain:
+An 8x16 input and 8 biases for the first layer, and a 4x8 weight Matrix for the second linear layer.
+We set `bias=False` because we're having these networks proposing updates,
+and we want them to be stable, the update is usually going to be zero or close to it.
+So there is no need for the bias, and we set `bias=False` to keep the number of parameters as low as possible 
+(That is "the name of the game").
+
+This is one way to implement this, not particularly fast, we do reshaping and then feed
+these examples through the linear layer.
+We can "cheat" by using convolution, we're going to apply this linear Network on top of each set of inputs.
+We do it by having a filter size of one, a kernel size of one in our convolutional layer.
+We have 16 input channels in the model input, are going to 8 output channels from this first convolutional layer.
+The kernel size is 1x1, then RELU, and then another 1x1 convolutional layer.
+This gives me the right shape output and if we look at the parameters the 1st convolutional layer
+has `[8,16,1,1]` parameters in its filters.
+TODO: convince yourself that these 2 are doing the same operation.
+JH: In languages like APL there's an operation called stenciling which is the same idea, applying some computation over a grid.
+
+Convolutions are very efficient as GPUs are set up for this kind of operation.
+Neural cellular automata is doing a convolution operation for every pixel that we're applying.
+Just looking at the neighborhood and producing an output, there is no global thing to handle.
+GPUs were designed for running some operation for every pixel on a screen to render graphics.
+We leverage that built-in bias of the hardware by doing lots of little operations in parallel to make it go fast,
+and can even run these real time on the browser. 
+We have the infrastructure in place, we put it into a class `SimpleCA` for cellular automata.
+We have our little brain, 2 convolutional layers and RELU, optionally we can set the weights of the second layer to zero,
+to start conservative in terms of what updates we produce.
+Not necessary but it does help the training.
+
+The forward is applying the filters, it's feeding it through the first convolutional layer, then the RELU, then the second layer.
+And then it is doing a final step (again inspired by biology). 
+Biological systems do not have a global clock where everything updates at the same time,
+it is much more random and organic, each one is almost independent.
+To simulate that we create a random update mask, some 0s and some 1s, according to what our update rate is (like Dropout).
+This determines whether we apply this updates to the original input or not.
+We start from a perfectly uniform grid, every cell is running the same rule, after one update we will still
+have a uniform grid, no randomness, so we can never break out of that.
+Once we add the random masked updates only a subset of cells are going to be updated,
+and now there's some differences, different neighborhoods with some randomness in.
+Like in a biological system, no cell is going to be identical, so that's a little bit of additional complexity. 
+
+We do training using the same dummy dataset loaders as before.
+We define a progress callback `NCAProgressCB`, doing some plotting (not going to spend too much time on it).
+Interesting stuff happen in our training callback.
+We are modifying our prediction function which is more complicated than just feeding the data through the model.
+We are setting up a pool of grids, 256 examples, all going to start out as just uniforms 0s.
+Every time we call predict(), we pick some random samples from that pool.
+We occasionally reset those samples to the initial state, and then we can apply the model a number of times.
+If we're applying this model 50 steps, it is like a 50 layer deep model.
+By applying this a large number of times we could get numerical instability (gradient exploding) which we'll deal with later.
+
+We apply the model a large number of steps then we put those final outputs back in the pool for the next round of training 
+and restore our predictions these are the outputs after we've applied a number of steps.
+We use a `style_loss` saying "does this match the style of my target image"
+and we add an `overflow_loss` that penalizes it if the values are out of bounds.
+`get_loss()` is doing a style loss plus overflow loss to keep things from growing exponentially 
+out of bounds, something likely to happen when we apply a large number of steps, so we want to penalize that.
+In `backward` we add *gradient normalization* a technique that is also useful in other places.
+We run through the parameters of the model normalizing them.
+This means that even if they are really tiny or large at the end of that multiple number of update steps
+it brings this back under control.
+JH: let's put a bookmark to come back to that in more detail.
+
+It takes a little while to ran, and we can see the progress callback scatter plotting the loss.
+In `NBAProgressCB` we set the `ylim` to the minimum of the initial set of losses,
+because the Overflow loss is sometimes much larger than the rest of the loss.
+That can cause bad scaling, so using a log scaling and flipping the bounds tends to help 
+visualize what is important, e.g., the overall trend.
+We can see the outputs here and what we are visualizing is the examples that we've drawn from the pool every time we're drawing.
+Here we've got a fixed batch size that should probably be an argument.
+We can take a look at them and compare them to the style loss.
+Initially they don't look similar but after some training we get some "Webby" tendencies.
+
+We can take this model and apply it to like a random grid, log the images every 100 steps.
+We see that starting from this random position it quickly builds this pattern.
+It doesn't look perfectly spider Webby but this model has only 168 parameters.
+The magic of these models is that with few parameters they're able to do something impressive.
+If we give it more channels to work with 8 or 16 and more hidden neurons 32 or 64,
+it is still a tiny model but it's able to capture much nicer textures.
+TODO: try some larger sizes.
+
+[[
+As a little preview of what's possible, Jonno did a project before using miniAI, so the code's a little messy hacky..
+Wrote a fragment Shader in webgl, designed to run in the browser, a little program that runs once for every pixel.
+We have the width of the neural network, sampling the neighborhood of each cell.
+We have our filters, we have our activation function. This is in a language called glsl.
+We're running through the layers of the Network and proposing our updates.
+He had more hidden neurons, more channels, and optimize with a slightly different loss function.
+Style loss plus clip so the prompt I think dragon scales or glowing dragon scales.
+We can see this is running in real time and it's interactive.
+We can click to zero out the grid and then see it rebuild within there.
+In a similar way in the report Jonno is logging interactive HTML previews.
+we've got some videos and we are just logging the grids from the different things.
+You can see these are still pretty small networks, only have four channels because its working with rgb shaders.
+Jonna did some "messing around" with video which is just messing with the inputs to different cells 
+to try and get some some cool patterns.
+Thinking of denoising cellular automata and stylizing or image restoration study the automata.
+We can have a lot of fun with this structure and it was a good demo 
+of how far can we push what you can do with the training callback, to have pool training and normalization, etc. 
+It is different from a batch of images and labels. 
+]]

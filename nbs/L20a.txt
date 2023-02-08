@@ -1,0 +1,144 @@
+Jeremy Howard L20
+
+Implementing Mixed Precision training 
+
+`ddpmcb` is small, but we want to get rid of it to make everything cool without callbacks.
+We can put `noiseify` inside a collation function, `collate_ddpm`. 
+A collation function turns the data into a tensor representing the independent variable one tensor
+representing either the dependent variable.
+
+`collate_ddpm` will call the default `default_collate` on the batch 
+and then grabs the `x` part which is `image` (the dataset uses dictionaries).
+We grab the images and call `noiseify` on that collated batch,
+then that is the same thing as notebook 15_ `before_batch`.
+`before_batch` is operating on the thing that came out of the `default_collect` function.
+If we do it here and then 
+We define a ddpm dataloader `dl_ddpm` function which creates a dataloader from some dataset `ds`.
+We pass-in a batch size `bs`, with the `collation_ddpm` function.
+Then we can create our DLS not using the `dataloaders_fromdd`,
+but instead we use the original `Dataloader`.
+We just pass in the dataloaders for `train` and `test`,
+and we don't need a ddpm callback anymore.
+
+MIXED PRECISION
+The `MixedPrecision` callback is a `TrainCB` callback.
+Pytorch mixed precision(https://pytorch.org/docs/stable/notes/amp_examples.html) docs 
+show typical mixed Precision examples.
+```Python
+# Runs the forward pass with autocasting.
+        with autocast(device_type='cuda', dtype=torch.float16):
+            output = model(input)
+            loss = loss_fn(output, target)
+```
+This is a context manager, starts calling `__enter__` and when they finish they call `__exit__`.
+Thus, we can put the torch.autocast into an attribute and call ``__enter__`` in `before_batch`.
+After we've calculated the loss we want to finish that context manager.
+so `after_loss` we call the `__exit__`.
+
+JH had to add `after_loss` in the 09_learner, in a section called "updated version since the lesson".
+There he added an `after_predict` and `after_loss` and `after_backward` and an `after_step`.
+That means that a callback can now insert code at any point of the training Loop.
+We haven't (yet) used all of those different things here.
+
+Pytorch doc indicates code that has to be run for mixed precision.
+Instead of calling lost.backwards we call `scalar.scale(learn.loss).backward()`.
+The doc indicates that when we do the step instead of `optimizer.step` we call 
+`scalar.step.optimizer` and  `scalar.update`.
+We've replaced `step` with `scalar.step` `scalar.update`.
+
+With the `MixedPrecision` class we don't have to think about any of those details.
+We can add `MixedPrecision` to anything. 
+
+`cbs` no longer has a `ddpmcb` but we do have the `MixedPrecision`, which is a `TrainCB`,
+so we just need a normal Learner not a trained learner.
+We initialize our ddpm.
+
+To benefit from MixedPrecision we need to do quite a bit at a time, the GPU needs to be busy.
+With something as small as fashion mnist it's not easy to keep a GPU busy.
+So we increased the batch size by four times, which means that each epoch is going to have 
+four times less batches because they're bigger.
+Hence it's got four times less opportunities to update.
+That's got to be a problem because if we want to have as good a result as before, in less time.
+we need to increase the learning rate and increase the epochs.
+We increase epochs from 5 to 8, and increase the learning rate up to 1e-2
+
+It trains fine with the proper initialization and with the optimization function w/eps change.
+It trains even though it's doing more epochs, trains about twice as fast and gets the same result.
+The Accelerate library from huggingface (created by Sylvain), 
+provides a single accelerator to accelerate your training loops.
+One of the things it does is mixed Precision training.
+It also lets us train on multiple GPUs and on TPUs.
+A `trainCB` subclass, `AccelerateCB` will use accelerate.  
+To use accelerate we create an accelerator, `acc`, tell it what kind of mixedPrecision to use.
+We use 16 bit floating point, `fp16` and call `acc.prepair`,
+pass-in a model, optimizer, training and validation dataloaders.
+It returns a model, Optimizer, train and validation data loaders but wrapped up in accelerate.
+Accelerate is going to automatically do all the things that are required.
+One more thing we need is change our loss function to use accelerate.
+We have to change `backward, (that's why we inherit from `trainCB`), 
+to call `self.acc.backward` and pass-in loss.
+
+Noisify change:
+Rather than returning a couple of tuples, just return a tuple with 3 things: `xt, t.to(device), \epsilon`.
+Prefer to have 3 things in the Tuple, don't want to have to modify the my model, 
+nor modify the training callback, avoid anything tricky.
+I want to have a custom collation function but I don't want to have it modify the model.
+Lets go back to using a UNet2Dmodel.
+But how can we use a UNet2Dmodel when we have 3 things?
+Modified `trainCB` to add a parameter `n_inp`, number of inputs to the model.
+Normally, by default, we would expect one input, but this model has two inputs.
+
+When we call AccelerateCB (a TrainCB) we say we're going to have 2 inputs.
+It is going to remember how many inputs we asked for.
+So when we call `predict` it is going to pass `*learn.batch[:self.n_inp]`.
+Ditto when we call the loss function it's going to be `*learn.batch[self.n_inp:]`.
+This way we can as many inputs/outputs.
+We need to make sure that the model and the loss function take the number of parameters.
+The loss function takes the preds and however many `n_inp` we have.
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+We need to take the `.sample` out, so we define `DDPMCB2(Callback)`.
+After the predictions are done replace them with `.sample` 
+The only thing we need is noiseify, the collation function and `DDPMCB2`. 
+We do learner() and fit() and we get the same result.
+Takes the same amount of time because we are not using multi-GPU or GPU, just using mixed Precision.
+It is just a shortcut, to enable the use of other types of (multiple) accelerators.
+
+A sneaky trick: to speed up the data loading and transformation process is
+to create a new dataloader class which wraps your existing data loader and replaces `__iter__`.
+When we call this it goes through the dataloader as usual,
+but then you also go through i from 0 to (by default) 2, and then we spit out the batch.
+
+So it is going to spit out the batch twice.
+Then every epoch is going to be twice as long, but it's going to only load and augment the data 
+as often as one epoch, but it's going to give us 2 epochs worth of updates.
+There's no reason to have a whole new batch every time.
+Looking at the same batch 2-4 times at a row is fine.
+What happens is you look at that batch you do an update, 
+get ready a part of the weight space,
+look at the same batch and find out now where to go in the weight space.
+
+It is still useful so I just wanted to add this little sticky trick here particularly because um
+if we start doing more stuff on kaggle we'll probably want to surprise all the kagglers with how fast
+our um mini AI Solutions are and they'll be like how is that possible they'll be
+
+TODO: Find other ways to handle the CPU/GPU imbalance problem...
+Experiment with these techniques on other data sets or
+other variants of these approaches, or different noise schedules to try.
+Can we get away with less than 1000  steps... why not train with only 200 steps?
+Less steps would be good because the sampling is slow.
+With fewer steps we would have to adjust the noise schedule appropriately.
+
+When we are selecting the timestep during training, we selected randomly 
+uniformly each timestep has an equal probability of being selected.
+Maybe different probabilities are better.
+Some papers analyze that more carefully, so that's another thing to experiment with.
+
+There are two ways of doing the same thing, if we change that mapping from T to Beta
+then we could reduce T and have different betas, would give a similar result as changing the 
+probabilities of the t's.
+
+Also noise levels that we choose affect the behavior of the sampling process.
+What features we focus on as people play around with that maybe they'll 
+notice how different noise schedules affect maybe some of the features 
+that we see in the file image.

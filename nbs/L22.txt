@@ -1,0 +1,561 @@
+Lesson 22 Jeremy Howard on notebook 22. 
+A fairly simple improvement to our ddim implementation for fashion mnist.
+Changes today are to make life better and simpler, reflecting the way the papers have been evolving.
+Recent papers no longer have the concept of n steps, which they had before, and it always bothered us, the capital T.
+t over T is saying timestep number 500 out of 1000, so it's time step 0.5, lets just call it 0.5. 
+We are going to use the cosine scheduler and let's get rid of the steps and the capital T.
+Here is `abar(t)` again and now we've got rid of the capital T.
+Now a timestep is between 0-1, and it represents what percentage of the way through the diffusion process we are at.
+0 would be plain image and 1 all noise.
+Other than that this is the same equation.
+We can take the inverse to calculate t `inv_abar()`: first take the square root, and then take the inverse cos and then divide by 2 over pi or times pi over 2. 
+Now we don't look up alphabar in a list, it's something we calculate with a function from a float.
+That means we can also calculate T from an alphabar.
+
+`noiseify()` has changed a little, so now when we get the alphabar for the timestep we don't look it up, we just call the function.
+The timestep is a random float between 0 and 0.999.
+Noisify is returning the `xt`, the timestep `t` which is now a float, and the noise $\epsilon$ 
+that's the thing we're going to predict.
+The dependent variable is this tuple there is our inputs to the model.
+
+Here is what that looks like.
+When we look at our input to the training process, a `t` of 0.05 through the forward diffusion process looks like this,
+and at .65 through it looks like this.
+T: The process is more a continuous time step and process rather than discrete timesteps.
+The model is the same, the callbacks are the same, the fitting process is the same.
+
+We define a `denoise()` function so we can take a batch of data that we generated the noisified data,
+(here it is again), and we can denoise it.
+We know the `t` for each element (`t` is different for each element now),
+so we can calculate the alphabar `abar_t` for each element, and then we can undo the noisification to get the denoised version.
+We do it and we get this, which shows what actually happens when we run a single step of the model,
+on varyingly partially noised images.
+This is something not seen often, as not many people are working in interactive notebook environments.
+It is helpful to get a sense of, e.g., if you're .25 or .95 of the way through the forward diffusion process,
+this is what it looks like when you undo that.
+
+We can see what is going on, e.g. at .45 looks all noise, yet it found the long-sleeved top, close to the real one.
+At .35 we can see there's a shoe, and it really picked up the shoe.
+Impressive models in one step.
+
+Sampling is basically the same, except now rather than starting with the range function to create timesteps,
+we use `torch.linspace` to create timesteps.
+If we did 1000, our timesteps start at 0.999 and they end at 0, linearly spaced with this number of steps.
+We now calculate `abar`, and the next abar is going to be whatever the current step is minus one over steps.
+For 100 steps it would be 1 - 0.01, so this is stepping through linearly.
+
+If we do DDIM for 100 steps, we get a FID of 3 which is better than we had on 100 steps through our previous 
+DDIM so this is a good sampling approach.
+Jono will talk more about better sampling approaches.
+
+The original DDPM paper has 1000 timesteps, lot of people follow that, but we don't have to be bound to that, lets break that convention.
+Time goes from 0 to 1 that can simplify some things, maybe complicates others.
+In notebook 23 we will see a simpler notation.
+
+JH: new research, in notebook 22_noise-pred.
+We create a different kind of model, not a model that predicts the noise given the noised image and `t`.
+Instead we define a model which predicts `t` given the noised image.
+
+When we looked at something like this, it seems obvious roughly how much noise each image had.
+When we call the model, why are we passing in the noised image and the amount of noise or the 't'.
+The model could figure out how much noise there is.
+Wanted to check the contention that the model could figure out how much noise there is, by defining a model to predict how much noise there is.
+Created a different `noisify()` that grabs an alphabar_t `al_t` randomly between 0-1,  per item in the batch.
+Now the independent variable is the noise image `xt`, and the dependent variable is `al_t`.
+We define a model that can predict `al_t` given a noised image.
+`al_t` goes between 0-1, so we've got a choice, we don't have to do anything,
+but we may consider putting a sigmoid at the end of the model.
+The difference between 0.999 and 0.99 is significant, if we do `logit()` then we don't need the sigmoid at the end.
+It will naturally cover the full range, be centered at zero with the normal range of numbers,
+and it will treat equal ratios as equally important at both ends of the spectrum.
+My hypothesis is that using `logit()` would be better, and inded a test confirmed it was better.
+Without the `logit()` the model didn't work well, this is an example of thinking thru details that are important.
+If we hadn't done this then we would have come away thinking we can't predict it's noise amount.
+
+In this example of a minibatch the numbers can be negative or positive, i.e., zero represents noise Alphabar of 0.5.
+3.05 is not very noised, but -1.12 is pretty noisy.
+Given this image we would predict 3.05.
+It is always useful to know a baseline, what counts as good, is it better than random or predicting the average?
+
+If we always predicted a constant, e.g., 0., gives a loss of 3.5.
+Another way to do it is just put MSE here, and then look at the MSE loss between 0.5 and a single minibatch 
+If we're getting something that is about 3, then we haven't done any better than random.
+This model doesn't actually have anything to learn, it always returns the same thing, so we call `fit()` with `train=False` 
+just to find the loss.
+These are a couple of ways of quickly finding a loss for a baseline naive model.
+
+Pytorch will warn if we try to use MSE and the inputs and targets have different shapes.
+It will broadcast, and give a result that we would not expect, with a warning.
+One way to avoid that is to use `.flatten` on each.
+A flattened MSE is useful to avoid the warning and also avoid weird results.
+We'll use that for our loss.
+The model is the one that we always use, the difference is that  we just have one output now,
+because this is a regression model, it's just trying to predict a single number.
+The learner now uses MSE loss, everything else is the same as usual.
+We train it and see that the loss is better than 3, so we're learning something, and end up with a 0.075 MSE,
+good considering the wide range of numbers we're trying to predict.
+We save that model as noise prediction on Sigma.
+We can take a look at how it's doing by grabbing one batch of noise images, putting it through our
+`tmodel` (it's really an alphabar model but we called it a `tmodel`).
+Then we can take a look to see what it's predicted for each one and we can compare it to the actual for each one.
+Here it said I think it is about 0.91 and actually it is 0.91, similarly for others.
+The hypothesis is correct, we can predict the thing that we were putting in manually as input.
+
+2 reasons to check this: 1) it would be simpler if we weren't passing in the t each time.
+2) it would open up a wider range of sampling.
+Precisely controlling the amount of noise we try to remove each time, and then remove exactly that amount of noise each time, feels limited.
+So lets try to remove this constraint.
+
+Having built this model we don't need to pass-in `t`. Let's try it. 
+Replicated the 22 cosine notebook, and made a couple of changes:
+First is that noisify doesn't return `t` anymore so there's no way to cheat, we don't know what `t` is.
+The UNet now doesn't have `t` so it's going to pass zero every time, it has no ability to learn from `t`.
+It doesn't matter what we pass-in, we could have changed the UNet to remove the conditioning on `t`,
+but for research this is just as good, for finding out...
+[ it's good to be lazy when doing research there's no point doing something a fancy way when you can do it a quick and easy way
+before you even know if it's going to work].
+We train the model and check the loss, here is 0.034, previously it was 0.033 so interestingly it's a tiny bit worse, but it is close.
+We save that model and then for sampling we've got the same DDIM step as usual.
+Sampling is the same as usual except now when calling the model we have no `t` to pass in, so we just pass-in `x_t`.
+(we still know `t` because we are still using the usual sampling approach, but we are not passing it to the model).
+We can sample and what happens is actually pretty garbage 22 is our FID, some of the images are still really noisy.
+So we failed, it's a little discouraging when you think something's going to work and it doesn't.
+But, if we think something's going to work and it doesn't, lets think well.
+We are going to have to do a better job of it, as it ought to work.
+
+No-time Model
+So tried something different. 
+Without passing in the `t` it doesn't know exactly how much to remove. 
+It might remove a little bit more/less noise that we want.
+We know from testing we did that sometimes it's out by 0.02.
+If you're out consistently sometimes it's gotta end up not removing all the noise.
+So the change made was to the DDIM step.
+.
+The DDIM step is the normal DDIM step, so Step One is the same.
+Don't worry about that because it's the same as we've seen before.
+But now used the `tmodel`, so passed the noised image into the `tmodel` (which is an alphabar model)
+to get the predicted Alphabar for each image.
+We know from here that sometimes it did a good job, but sometimes it didn't.
+JH discovered that sometimes it could be really too low, so to ensure it wasn't "too crazy",
+found the median for a minibatch of all the predicted Alphabars and clamped it to not be too far away from the median.
+When I did my X0_hat is rather than using Alphabar_t  used the estimated Alphabar_t for each image clamped to be 
+not too far away from the median.
+This way it was updating it based on the amount of noise that actually seems to be left behind,
+rather than the assumed amount of noise that should be left behind if we assume it has removed the correct amount.
+All else is the same.
+This made all the difference and here it is they are beautiful pieces of clothing, so 3.88 versus 3.2,
+that's close enough.
+We'd have to run it a few times, is probably a tiny bit worse but close.
+This was done in a couple of days, but the t approaches have been developed since 2015, 
+we would expect it's quite likely that the no `t` approaches could eventually surpass the t-based approaches.
+There is room to improve is if we plot the the FID or the KID for each sample during the reverse diffusion process 
+it actually gets worse for a while.
+That is a bad sign, no idea where that's happening, but it's a sign that if we could improve each step 
+then we could get better than 3.8.
+
+Jonno: Highlight the research process, it wasn't like this linear thing, it was multiple days of discussions.
+Noticed in the paper they do clamping, maybe that can help.
+There's a lot of back and forth, the code that was commented out,
+prints xt.min, xt.max, alphabar, pred, my average prediction is about what we'd expect.
+But sometimes the max explodes... debugging and exploring and printing things out.
+
+We are trying these out on some bigger models and seeing maybe it'll work.
+Plan is spend the time train a proper model and see how well it does if it seems interesting.
+
+"On the importance of noise scheduling for diffusion models"
+The other area for doing some research on is the DDPM implementation, where we accidentally weren't doing it from -1 to 1 
+for the input range.
+It turned out that -1 to 1 wasn't a good idea anyway, and we ended up centering it from -0.5 to 0.5.
+A paper came out which cast some light on this, and cited a paper that we weren't aware of.
+Jono will tell us a bit about that. 
+AK tweeted about a paper (he reviews everything that comes up on arcv every day).
+"On the importance of noise scheduling for diffusion models" by a researcher at the Google brain team,
+*who's also done a paper on a "Recurrent interface Network" outside of the scope of this lesson but also worth checking*
+Noise scheduling and the strategies for that, and want to show that (1) scheduling is crucial for performance.
+And the optimal one depends on the charts when increasing the image size the noise scheduling that you want changes 
+and (3) scaling the input data by some factor is a good strategy for for working with this.
+That's what we've been doing where we scale from -0.5 to 0.5 or -1 to 1 or normalize.
+They demonstrate the effectiveness by training a high resolution model on Imagenet.
+Amazing samples they will stream one later.
+Liked this paper, short and concise, and gets all the information across.
+
+They introduced a noising process, with square root of gamma(t) times X0 plus the square root of 1 minus gamma(t) times the noise.
+gamma(t) is often used for the continuous time case, instead of the alphabar and the betabar schedule
+for a 1000 timesteps, there will be a function gamma(t) that tells you what your Alphabar should be.
+JH: so that's how our function is actually called abar but it's the same thing. 
+It takes in a timestep from zero to one and then that's used to noise the image.
+Interestingly what they're showing is something that we had discovered and I had been complaining about that
+my DDIM with an Eater of less than one weren't working.
+When I added extra noise to the image it wasn't working, and what they're showing here is 
+if you use a smaller image then adding extra noise is probably not a good idea.
+They refer to information destroyed and signal to noise ratios, 
+and that's really helpful because it's not something that's obvious, 
+but at 64 by 64 pixels, adjacent pixels might have much less in common versus the same amount of noise added at a much
+higher resolution, the noise averages out, so we can still see a lot of the image. 
+The same noise level for different image sizes might be a harder or easier task.
+They investigate some strategies for different noise schedule functions.
+We've seen the original version from the DDPM paper, we've seen the cosine schedule,
+and we might look at a sigmoid-based schedule.
+They show the continuous time versions and they plot how you can change various parameters 
+to get different gamma() functions,(or in our case the alphabar).
+We start with pure image no noise at t=0, moving to all noise no image at t=1.
+But the path taken is different for the different classes or functions and parameters, 
+and the (log of) signal to noise ratio will change over time.
+That is one of the knobs we can tweak.
+If a diffusion model isn't training well, it might be related to the noise schedule.
+We can try different noise schedules, either changing the parameters in one class of a schedule,
+or switching from a linear to a cosine, to a sigmoid.
+
+The second strategy: adjusting input scaling factor.
+This is what we did in those experiments, to add a scaling factor to X0.
+(JH: We were accidentally using B of 0.5.)
+That is the second dial that we can tweak, keeping the noise schedule fixed, just scale x0 to change 
+the ratio of signal to noise for different scalings.
+(JH: What is in Fig. (c) is what we were accidentally doing.)
+They have a strategy that combines some of those things.
+
+Experiments:
+They provide a table of different schedules cosine and sigmoid,
+and in bold are the best results for different image sizes: 64x64, 128x128, 256x256.
+The best schedule is not necessarily the same.
+Depending on the data size, a different (sigmoid?) schedule might be better.
+There is no single best schedule, no betaMin and betaMax that are just the best.
+For input scaling at different sizes, different schedules they tested and and best choices found.
+Another design choice that is implicit or explicitly part of your diffusion model training and sampling,
+is the noise schedule and scaling of the inputs.
+A "rule of thumb" for how to scale an image based on image size.
+As they increase the resolution they can still maintain performance,
+where previously it was hard to train a large resolution pixel space model.
+To do that they leverage their "recurrent interface network". 
+They get state-of-the-art high quality at 512x512 or 1024x1024 samples on class conditioned Imagenet.
+They compare to previous approaches, using e.g., 1/3 of the training steps, with the same other settings,
+they get better performance because of the better choise of input scaling.
+
+Lets switch to notebook 23, an implementation of some ideas from the paper 
+"Elucidating the Design Space of Diffusion-Based Generative Models".
+It takes an explicit look at the question of input scaling, their approach was to think how should things be. 
+Our approach is more fun because we never quite know what's going to happen.
+Given all the things that are coming into our model, how can we have them all nicely balanced.
+We will skip back and forth between the notebook and the paper.
+The start of this is all the same, except now we are going to do it -1 to 1 as we rely on the paper's carefully designed scaling.
+*except that I put it back in the notebook as well*
+`sig_data` is the standard deviation of the actual data, which was calculated for a batch `xb.std()`.
+However, this used to be -0.5, when we did the -0.5 to .5 thing.
+This is the standard deviation of the data before when it was still minus 0.5,
+so it is half the real standard deviation, for reasons JH doesn't yet understand, it is giving better scaled results...
+It should be 0.66, but we use 0.33, as there's still "a bug" that seems to work better, so we still got some Mysteries involved.
+
+FORMULA
+We can either predict the noise or predict the clean image, each can be better in different situations.
+If the model is given something which is nearly Pure Noise, and is asked to predict the noise,
+it is basically a waste of time, because the whole thing is noise.
+Similarly, trying to predict the clean image when given an image that is nearly clean is also a waste of time.
+We want something which, regardless of how noisy the image is, should be an equally difficult problem to solve.
+They use a new thing called Cskip, a number which is indicating what we should do for the training Target.
+It is not just predict the noise nor the image all the time, but predict a lerpt version of one or the other,
+depending on how noisy it is.
+In the formula, `y`  is the plain image, `n` is the noise, `y + n` is the noised image.
+If `Cskip = 0` we predict the clean image `y`, and if `Cskip = `` we would predict the noise `n`.
+By picking a `Cskip` value we're predicting the clean image or the noise.
+They make `Cskip` a function of `\sigma`.
+This is a simpler notation, no more Alphabars, Alphas, betas, betabars.
+There is just `\sigma`, which is the same thing as Alphabar used to be.
+It simplified, but also made things more confusing by using an existing symbol for something totally different!
+There's going to be a function that says depending on how much noise there is either predict the noise or the clean image
+or something between the two.
+
+This chart looks at the loss to see how good is a trained model at predicting when $\sigma$ is really low,
+(small alphabar) or when $\sigma$ is in the middle or when $\sigma$ is really high.
+When it is nearly all noise or nearly no noise, we are not able to do anything.
+We are good at doing things when there is a medium amount of noise.
+We first need to figure out some sigmas, let's kick a distribution of sigmas that matches the red curve in the Figure.
+This is a normally distributed curve where this is on a log scale, so this is a log-normal curve.
+To get the sigmas they picked a normally distributed random numbe, and then they export.
+This is called a log normal distribution, they used a mean of minus 1.2 and a standard deviation of 1.2.
+About 1/3 of the time they're going to be getting a number that is bigger than zero here, exp(0)=1,
+so about 1/3 of the time they're going to be picking sigmas that are bigger than one.
+
+An histogram of the sigmas that we're going to use, nearly always less than 5, but sometimes it's way out there.
+It is hard to read these histograms so we use Seaborn (built on top of matplotlib) which has
+more sophisticated and nicer looking plots.
+The KDE plot is a kernel density plot, it's a histogram but it's smooth.
+Clipped it at 10 so that we can see it better that the majority of the time it's going to be about 0.4 or 0.5,
+but sometimes it's going to be really big.
+XXXXXXXXXXXXXXXXXXXXXXX
+
+Noiseify is going to pick a $\sigma$ using that log normal distribution, and then we get the noise as usual.
+But now we're going to calculate $c_{skip}$, to find something between the plain image and the noise to input.
+We calculate $c_{skip}$ in `scalings()`. 
+What's the total amount of variance, `totvar` at some level of $\sigma$ `sig`.
+`sig**2` is the definition of the variance of the noise.
+And we also have the $\sigma$ of the data itself, `sig_data`.
+We add those two together we get the total variance. 
+The paper said to use the variance of the data `sig_data**2`, divided by the total variance `totvar`, and use that for $c_{skip}$.
+If the total variance is really big (it's got a lot of noise), then $c_{skip}$ is going to be small.
+So if there is a lot of noise, then try to predict the original image (predicting the noise would be too easy).
+Conversely, if there's hardly any noise, then total variance will be small, $c_{skip}$ will be big,
+then try to predict the noise.
+
+The idea is that our target is not the original image, nor the noise, but it's somewhere between the two.
+An easy  way to understand that is to draw a picture of it.
+Here are some examples of noised input with various amounts of with various sigmas (Sigma is Alphabar).
+Here's an example with very little noise 0.06, so the target is to predict the noise, which is the hard thing to do.
+Another example 4.53, nearly all noise so the target is to predict the image.
+And for something which is a little bit between the two, e.g., 0.64, 
+the target is predict some of the noise and some of the image.
+That's the idea, it is making the problem to be solved by the UNet equally difficult regardless of what $\sigma$ is.
+It doesn't solve our input scaling problem it solves the difficulty scaling problem.
+[To solve the input scaling problem they do it]
+
+<soap>
+T: In the Silver Lake the interpolating between the noise and the image is similar to the B objective.
+Now been used by different models, e.g., stable diffusion 2.0 was trained with a B objective.
+People are using this methodology and getting good results.
+JH: All papers created by Nvidia researchers (like this one) flows under the radar and is ignored.
+The V objective author is Tim Salomons from Google, papers from Google and openAI everybody listens to.
+Karras has done the more complete version of this, and the V objective was mentioned in passing in the distillation paper.
+That is the one that everybody looked at.
+This paper did a principled analysis.
+</soap>
+The noise input as usual is the input image plus the noise times the sigma, we decide what our Target is.
+We take the noise input and we scale it by `c_in`, and the target we also scale up or down by `c_out`.
+`c_in` and `c_out` are both calculated and returned by `scalings(sig)`.
+Lets see one example of where these `c_` numbers come from, as they seemed pretty mysterious.
+(they were explained in the mathematical appendix B6 of the paper).
+
+APPENDIX B6:
+This is the variance of the noise,  this is the variance of the data, add them together to get the total variance,
+square roots the standard deviate total standard deviation.
+So it is just the inverse of the total standard deviation, which is what we have here.
+The inputs for a model should have unit variance (we have done that always) 
+the inputs to the model is the clean data `y` plus the noise `n` times some number we're going to calculate,
+and we want that to be one 1.
+So the variance of the plain images plus the noise is equal to the variance of the clean images plus the variance of the noise.
+If we want that to be 1, then divide both sides by this and take the square root and that tells 
+us our multiplier has to be 1 over this.
+We have to know that the variance of two things added together is the variance of the two things added together.
+
+J: We want to do this when we looked at those sigmas that we're plotting the distribution,
+some are fairly low, you've also got somewhere the standard deviation sigma is like 40.
+The variance is high, we don't want to feed something with standard deviation 40 into our model,
+we would like it to be closer to unit variant.
+If we divide by roughly 40 that would scale it down, but then we also got some extra variants from our data,
+so it's like exactly 40 plus variance of the data,we want to scale back down to get unit variance.
+
+JH: This paper is doing what we spent weeks doing that improved every model,
+always to get mean 0 variance 1 inputs to our model and for all of our activations.
+The only other thing is include enough compute by adding enough layers and activations.
+Those two things seem to be all that matters.
+To make it even smoother by giving an identity path, trying to make things as smooth as as possible and as equal
+everywhere as possible.
+This is what they've done for the inputs and then also for the outputs.
+For the outputs it is the same analysis to show that.
+</Appendix>
+
+Now we've got our noise input, we've got a linear version somewhere between X0 and the noise to input,
+we've got the scaling of the output and the scaling of the input.
+For the inputs to our model we're going to have the scaled noise, the $\sigma$ and the target,
+which is somewhere between the image and the noise.
+A picture of this in a notebook shows what's going on as it gives an intuition around what problem the paper is trying to solve.
+
+The noise to input has a standard deviation of 1, the means is not zero, but why would it be,
+as we didn't do anything about the means.
+The paper only cared about having the variance 1.
+Somebody should try to adjust the input and output to have a mean of zero, as it does seem to help a bit, 
+as we saw with that generalized value stuff we did.
+But it is less important than the variance.
+The same with the target, it has got the one ... this is where if I change this to the correct value, 0.66 then
+it is slightly further away from one, both here and here quite a lot further away.
+Maybe that is because the data is not Gaussian distributed pixel data, so this bug turned out better...
+
+The UNets are the same, the initialization is the same, this is all the same.
+Train it for a while.
+We can't compare the losses because our target is different.
+We can create a denoise that just takes the thing we had in noiseify and solve for X0,
+they're going to multiply by C_out and then add $c_{skip} by noise to input.
+Here it is multiplied by C_out add noise 10.6.
+We can do noise so let's grab our sequence from the actual batch we had,
+let's calculate $C_{skip}$s here and see in for the sigmas in our minibatch.
+Let's use the model to predict the target given the diced?? input and the sigmas and then denoise it.
+
+Here is our noise to input which we've already seen, and here are our predictions, which are remarkable.
+This one here we can barely see, it found it, look at the shirt there's the shirt here,
+it is finding the little thing on the front. See what it should look like.
+In cases where the segment's?? pretty high like here,
+it's saying I don't know maybe it's shoes but it could be something else.
+It wasn't shoes but at least it's got the the bulk of the pixels and the rates.
+The 4.5 it has no idea what it is, maybe shoes maybe pants. 
+
+Another thing was a sigma of 80, which is what they do when they're doing sampling from Pure Noise.
+That is considered the Pure Noise level.
+We created some Pure Noise and denoised it just for one step, what happens is that it overlaid all the possibilities.
+We can see a pair of shoes, pair of pants, etc.
+Sometimes it is more confident that the noise is actually a pair of pants,
+and sometimes it's more confident that it's shoes.
+We get a sense of how from Pure Noise it starts to make a call about what this noise has been covering up.
+
+This first step from Pure-noise to something is a bit which JH feels least convinced about in diffusion models.
+It is trying to have a good mix of all possible things.
+It feels a bit hand wavy, it works well but not sure if it's like we're getting the full range of possibilities.
+Some papers are starting to say that maybe this is not the right approach.
+Later we may look at some of the ones that look at VQ models and tokenized stuff.
+Is interesting to see pictures (never seen any like this).
+
+SAMPLING
+Sampling becomes simpler.
+Much of the code in the sampling section is inspired by and some copied from Cat's K diffusion repo.
+This repo is a great generative modeling code.
+Before we talk about sampling we need to talk about what $\sigma$ we use at each reverse timestep.
+Previously we've always done something sketchy, just linearly gone down the sigmas (or the alphabars) or the t's.
+Sampling in the previous notebook we used [lens base so iron spot??] was questionable.
+At the start it was just noise, so we did not care. 
+In DDPMV3 we experimented with something that intuitively made more sense:
+For the first 100 timesteps we only run the model every 10 times, for the next 100 we run it 9 times,
+the next 100 every 8 times, ie at the start be less careful.
+The NVIDIA team's paper ran a whole bunch of experiments and at the start of training 
+we can start with a high $\sigma$, then step to a lower $\sigma$ in the next step, and then a much slower $\sigma$ ...
+The longer we train we step by smaller steps, so we spend more time fine-tuning carefully at the end,
+and not much time at the start.
+
+Another paper (won't talk about today) talks about the problems.
+In the very early steps this is the bit where you're trying to create a composition that makes sense. 
+For fashion MNIST we don't have much composing to do it's just a piece of clothing.
+But if we're trying to do an astronaut riding a horse, we need to think about how all those pieces fit together,
+and this is where that happens.
+
+JH worries that the Karras approach is not giving enough time for that.
+That is really the same as the first step, (from pure noise)..
+That whole piece feels wrong to JH.
+Makes a lot of sense that the sampling we should jump by big steps early,
+and small steps later, and make sure that the the fine details adjust.
+
+The `sigmas_karras()` function creates the schedule of reverse diffusion sigma steps.
+It's a bit of weird function in that it's the `rho` root of Sigma, where `rho=7`,
+i.e., the seventh root of sigma is basically what it's scaling on.
+They choose that seventh root because they tried it and it worked well.
+
+Appendix D1. Truncation Error Analysis
+The image in Appendix E.1 shows FID as a function of rho, what root we are taking.
+If you take the fifth root it seems to work well.
+They tried things on small datasets (CIFAR10 and Imagenet64) and saw what works.
+
+<soap>
+the CEO of hugging face tweeted that "only people with huge amounts of gpus can do research now".
+It misunderstands how the actual research is done on very small datasets, and when done we scale it up.
+We're pushing the envelope in terms of how much we can do.
+We covered the main substantive path of diffusion models history, step by step, 
+showing every improvement, seeing improvements across all papers using only fashion MNIST on a single GPU 
+in like 15 minutes of training per model.
+</soap>
+
+This is the sigma we're going to jump to.
+The denoising `denoise(model, x, sig)` is going to involve calculating the `c_skip, c_out, c_in`,  and calling our model
+with the `c_in` scaled data `x` and the sigma `sig`, and then scaling it with `c_out` and then doing the `c_skip`.
+That is just undoing the noisify.
+This is all that is required to do one step of denoising for the simplest sampler which is called Euler.
+What's a sigma `sig` at time step `i` what's the `sig2` at time step `i`.
+A timestep is the sampling step, eg from the `sigmas_karras()` function.
+Then denoise(), and then just send back whatever you were given plus move a little bit in the direction of the denoised image.
+The direction is `x - denoised` (that is the gradient) (as discussed in Lesson 9?)
+We take the noise if we divide it by `sig` we get a slope, `(x - denoised)/sig`, how much noise is there per sigma.
+And the amount that we are stepping is `sig2-sig`. 
+Take that slope and multiply it by the change, that's the distance to travel towards the noise for this fraction.
+
+Alternatively, by an obvious algebraic change, we could think of this as being 
+of the total amount of noise the change in sigma we're doing what percentage is that.
+That is the amount we should step.
+These are two ways of thinking about the same thing.
+We're going to need to do this once per sampling step.
+
+`sample()` does that going through each sampling step, `range(len(sigs)-1)`,
+call the `sampler()` which initially we're going to use `sample_euler`, with that information,
+add it to our list of results `preds.append(x)`, and do it again.
+That is all the sampling is.
+We need to grab our list of sigmas `sigs` to start with
+`sigs = sigmas_karras(steps, device=model.device, sigma_max=sigma_max)`
+At the very start we need to create our Pure Noise image:
+`x = torch.randn(sz).to(model.device)*sigma_max`
+The amount of noise we start with got a sigma of 80. 
+
+We call `sample` using `sample_euler` and we get back good looking images and the FID is 1.98.
+This simple sampler, three lines of code plus a loop has given us a FID of 1.98, which is better than the cosine.
+We can improve it.
+Notice that we added no new noise, this is a deterministic scheduler, there's no rand anywhere.
+We can do some important `ancestral_euler_sampler` which does add rand.
+We do the denoising in the usual way, and we also add some rand.
+We need to ensure is given that we're adding a certain amount of randomness, we need to remove that amount of randomness
+from the steps that we take.
+Without going into the details, there is a way of calculating how much new randomness and how much
+just going back in the existing direction we do.
+
+There's the amount in the existing direction and there's the amount in the new random direction.
+We can pass in `eta` to scale that, e.g., if we scale it by half, half of it is new noise,
+and half of it is going in the direction that we thought we should go.
+That makes it better still, again with 100 steps adding a bit of extra noise now.
+
+*************
+[Heun's method](https://en.wikipedia.org/wiki/Heun%27s_method) does something which we can pictorially see 
+[Heun's Diagram](https://en.wikipedia.org/wiki/File:Heun%27s_Method_Diagram.jpg) here, to decide where to go.
+Where are we right now, what is the direction at the current Point.
+We take the tangent line (the slope) and that takes us to a a new spot.
+At that new spot we calculate a (new) slope,  and then we go halfway between the two.
+Each of these slopes is inaccurate, so we calculate the slope of where we are,
+the slope of where we're going, and then go halfway between the two.
+
+Lets compare Heun to Euler.
+We do the same first line, then the `denoised = denoise()` is the same.
+Then the (Euler "return step") is written in multiple steps in `sample_heun`.
+If this is the last step then we're done (so the last step is Euler).
+For an Euler step this is where we'd go... what does that look like if we denoise?
+So this calls the model a second time right.
+Where would that take us if we took an Euler step there?
+Here we are taking another step.
+It is just like in the picture, let's take the average and then use that the step.
+That is all the Heun sampler does.
+This just takes the average of the slope where we're at and the slope where the Euler method would have taken us.
+Notice that it called the model twice for a single step, so to be fair since we've been taking 100 steps with Euler, 
+we should take 50 steps with Heun.
+Now we beat it. 
+We can even go down to 20, which is doing 40 model evaluations, and it is better than our best Euler.
+
+Something weird/silly is that we're calling the model twice just to average them.
+But we already have 2 model results without calling it twice, because we can just look at the previous timestep.
+The LMS sampler does that, if I call LMS with 20 it actually does 20 evaluations, and it beats Euler with 100 evaluations.
+We won't go into the details of LMS, it didn't actually fit into my little sampling very well,
+so JH copied and pasted Cat's code.
+The key thing it does is it gets the current `sig` Sigma, it does the denoising `denoised = denoise(model,x,sig), 
+it calculates the slope, `d = (x-denoised)/sig`, and it stores the slope in a list `ds.append(d)`.
+It then grabs the first one from the list, `ds.pop(0)`, so it's kind of keeping a list of up to `order`, which is 4,  at a time.
+It then uses up to the last four to basically (yes??) the curvature of this and take the next step.
+That is pretty smart.
+If we want to do super fast sampling, this seems like a pretty good way to do it.
+
+People started to move towards a new similar sampler called the DPM++ but it's the same idea, 
+keep a list of recent results and use that.
+We can compare if we use an actual mini batch of data `xb` we get about 0.5.
+This is quite a great result, close to real data in FID, with 40 model evaluations.
+And the key here is making sure we've got unit variance inputs, unit variance outputs, 
+and equally difficult problems to solve in the loss function.
+
+J: Having a different schedule for sampling that is unrelated to the training schedule, in Karras paper,
+could apply to existing diffusion models that have been trained by others, 
+Use the Karras sampler and then in fewer steps get better results without any other changes.
+They do rearrange equations to get the other papers versions into their `c_skip, c_in, c_out` framework.
+Stable diffusion (V1?) was trained ddpm style training Epsilon objective.
+Now we can get these different samplers and different sampling schedules and do it in 15-20 steps,
+and get pretty nice images. 
+
+JH: Also, "elucidating the design space of diffusion-based models" adopted various different approaches,
+and explained what they are all doing the same thing when we parameterize as seen in Table 1.
+If we fill in these parameters we get paper A, these parameters is paper  B, etc.
+Then we found a better set of parameters which ended up simplifying things.
+Looking through this notebook the code is simple compared to all the previous ones.
+Every notebook we've done from DDPM onwards the code's got easier to understand.
+
+T: clarify like how this could exit some of the previous papers that we've looked at also like
+for example with the DDIM the deterministic approach is similar to the Euler method sample,
+The Euler ancestral is similar to the standard DDPM approach that was a stochastic approach.
+
+We are at the point where we look at creating a good quality UNet from scratch.
+We will use a different data set, starting to scale things up, using a 64 by 64 pixel Imagenet subset called tinyimagenet.
+We'll start looking at 3 Channel images (we're all sick of looking at black and white shoes!)

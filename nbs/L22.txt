@@ -168,12 +168,12 @@ for the input range.
 It turned out that -1 to 1 wasn't a good idea anyway, and we ended up centering it from -0.5 to 0.5.
 A paper came out which cast some light on this, and cited a paper that we weren't aware of.
 Jono will tell us a bit about that. 
-AK tweeted about a paper (he reviews everything that comes up on arcv every day).
+AK tweeted about a paper (he reviews everything that comes up on arxv every day).
 "On the importance of noise scheduling for diffusion models" by a researcher at the Google brain team,
 *who's also done a paper on a "Recurrent interface Network" outside of the scope of this lesson but also worth checking*
 Noise scheduling and the strategies for that, and want to show that (1) scheduling is crucial for performance.
 And the optimal one depends on the charts when increasing the image size the noise scheduling that you want changes 
-and (3) scaling the input data by some factor is a good strategy for for working with this.
+and (3) scaling the input data by some factor is a good strategy for working with this.
 That's what we've been doing where we scale from -0.5 to 0.5 or -1 to 1 or normalize.
 They demonstrate the effectiveness by training a high resolution model on Imagenet.
 Amazing samples they will stream one later.
@@ -183,36 +183,36 @@ They introduced a noising process, with square root of gamma(t) times X0 plus th
 gamma(t) is often used for the continuous time case, instead of the alphabar and the betabar schedule
 for a 1000 timesteps, there will be a function gamma(t) that tells you what your Alphabar should be.
 JH: so that's how our function is actually called abar but it's the same thing. 
-It takes in a timestep from zero to one and then that's used to noise the image.
-Interestingly what they're showing is something that we had discovered and I had been complaining about that
-my DDIM with an Eater of less than one weren't working.
-When I added extra noise to the image it wasn't working, and what they're showing here is 
-if you use a smaller image then adding extra noise is probably not a good idea.
-They refer to information destroyed and signal to noise ratios, 
-and that's really helpful because it's not something that's obvious, 
-but at 64 by 64 pixels, adjacent pixels might have much less in common versus the same amount of noise added at a much
-higher resolution, the noise averages out, so we can still see a lot of the image. 
+It takes in a timestep from 0 to 1 and then that's used to noise the image.
+JH: They show something we complained about, DDIM with an Eater of less than one weren't working,
+i.e., adding extra noise to the image, and they show that for smaller images adding extra noise is not a good idea.
+
+They refer to information destroyed and signal to noise ratios, helpful and not obvious.
+At smaller resolutions, eg 64 by 64 pixels, adjacent pixels might have much less in common,
+versus the same amount of noise added at a much higher resolution, the noise averages out, so we can still see a lot of the image. 
 The same noise level for different image sizes might be a harder or easier task.
-They investigate some strategies for different noise schedule functions.
-We've seen the original version from the DDPM paper, we've seen the cosine schedule,
-and we might look at a sigmoid-based schedule.
-They show the continuous time versions and they plot how you can change various parameters 
-to get different gamma() functions,(or in our case the alphabar).
+They investigate strategies for noise schedule functions:
+
+Strategy 1: Changing the noise schedule functions
+We've seen the original version from the DDPM paper, the cosine schedule, and will look at a sigmoid-based schedule.
+They show the continuous time versions and plot (change various parameters) 
+to get different gamma() functions, (or in our case the alphabar).
 We start with pure image no noise at t=0, moving to all noise no image at t=1.
-But the path taken is different for the different classes or functions and parameters, 
+But the path taken is different for the different classes of functions and parameters, 
 and the (log of) signal to noise ratio will change over time.
 That is one of the knobs we can tweak.
 If a diffusion model isn't training well, it might be related to the noise schedule.
 We can try different noise schedules, either changing the parameters in one class of a schedule,
 or switching from a linear to a cosine, to a sigmoid.
 
-The second strategy: adjusting input scaling factor.
+Strategy 2: adjusting input scaling factor.
 This is what we did in those experiments, to add a scaling factor to X0.
 (JH: We were accidentally using B of 0.5.)
-That is the second dial that we can tweak, keeping the noise schedule fixed, just scale x0 to change 
+That is the second dial that we can tweak: keeping the noise schedule fixed, just scale x0 to change 
 the ratio of signal to noise for different scalings.
 (JH: What is in Fig. (c) is what we were accidentally doing.)
-They have a strategy that combines some of those things.
+
+Combined Strategy: Compound Noise Scheduling 
 
 Experiments:
 They provide a table of different schedules cosine and sigmoid,
@@ -231,8 +231,9 @@ They get state-of-the-art high quality at 512x512 or 1024x1024 samples on class 
 They compare to previous approaches, using e.g., 1/3 of the training steps, with the same other settings,
 they get better performance because of the better choise of input scaling.
 
+**Design Space of Diffusion-Based Generative Models**
 Lets switch to notebook 23, an implementation of some ideas from the paper 
-"Elucidating the Design Space of Diffusion-Based Generative Models".
+"Elucidating the Design Space of Diffusion-Based Generative Models", by Karras et al. from NVIDIA.
 It takes an explicit look at the question of input scaling, their approach was to think how should things be. 
 Our approach is more fun because we never quite know what's going to happen.
 Given all the things that are coming into our model, how can we have them all nicely balanced.
@@ -240,10 +241,6 @@ We will skip back and forth between the notebook and the paper.
 The start of this is all the same, except now we are going to do it -1 to 1 as we rely on the paper's carefully designed scaling.
 *except that I put it back in the notebook as well*
 `sig_data` is the standard deviation of the actual data, which was calculated for a batch `xb.std()`.
-However, this used to be -0.5, when we did the -0.5 to .5 thing.
-This is the standard deviation of the data before when it was still minus 0.5,
-so it is half the real standard deviation, for reasons JH doesn't yet understand, it is giving better scaled results...
-It should be 0.66, but we use 0.33, as there's still "a bug" that seems to work better, so we still got some Mysteries involved.
 
 FORMULA
 We can either predict the noise or predict the clean image, each can be better in different situations.
@@ -252,11 +249,10 @@ it is basically a waste of time, because the whole thing is noise.
 Similarly, trying to predict the clean image when given an image that is nearly clean is also a waste of time.
 We want something which, regardless of how noisy the image is, should be an equally difficult problem to solve.
 They use a new thing called Cskip, a number which is indicating what we should do for the training Target.
-It is not just predict the noise nor the image all the time, but predict a lerpt version of one or the other,
+It is not just predict the noise nor the image all the time, but predict a lerpt version of them,
 depending on how noisy it is.
 In the formula, `y`  is the plain image, `n` is the noise, `y + n` is the noised image.
-If `Cskip = 0` we predict the clean image `y`, and if `Cskip = `` we would predict the noise `n`.
-By picking a `Cskip` value we're predicting the clean image or the noise.
+If `Cskip = 0` we predict the clean image `y`, and if `Cskip = 1` we would predict the noise `n`.
 They make `Cskip` a function of `\sigma`.
 This is a simpler notation, no more Alphabars, Alphas, betas, betabars.
 There is just `\sigma`, which is the same thing as Alphabar used to be.
@@ -281,15 +277,14 @@ more sophisticated and nicer looking plots.
 The KDE plot is a kernel density plot, it's a histogram but it's smooth.
 Clipped it at 10 so that we can see it better that the majority of the time it's going to be about 0.4 or 0.5,
 but sometimes it's going to be really big.
-XXXXXXXXXXXXXXXXXXXXXXX
 
-Noiseify is going to pick a $\sigma$ using that log normal distribution, and then we get the noise as usual.
+Noisify is going to pick a $\sigma$ using that log normal distribution, and then we get the noise as usual.
 But now we're going to calculate $c_{skip}$, to find something between the plain image and the noise to input.
 We calculate $c_{skip}$ in `scalings()`. 
 What's the total amount of variance, `totvar` at some level of $\sigma$ `sig`.
 `sig**2` is the definition of the variance of the noise.
 And we also have the $\sigma$ of the data itself, `sig_data`.
-We add those two together we get the total variance. 
+We add those two together to get the total variance. 
 The paper said to use the variance of the data `sig_data**2`, divided by the total variance `totvar`, and use that for $c_{skip}$.
 If the total variance is really big (it's got a lot of noise), then $c_{skip}$ is going to be small.
 So if there is a lot of noise, then try to predict the original image (predicting the noise would be too easy).
@@ -311,7 +306,7 @@ It doesn't solve our input scaling problem it solves the difficulty scaling prob
 T: In the Silver Lake the interpolating between the noise and the image is similar to the B objective.
 Now been used by different models, e.g., stable diffusion 2.0 was trained with a B objective.
 People are using this methodology and getting good results.
-JH: All papers created by Nvidia researchers (like this one) flows under the radar and is ignored.
+JH: Papers by Nvidia researchers (like this one) flow under the radar and is ignored.
 The V objective author is Tim Salomons from Google, papers from Google and openAI everybody listens to.
 Karras has done the more complete version of this, and the V objective was mentioned in passing in the distillation paper.
 That is the one that everybody looked at.
@@ -324,7 +319,7 @@ Lets see one example of where these `c_` numbers come from, as they seemed prett
 (they were explained in the mathematical appendix B6 of the paper).
 
 APPENDIX B6:
-This is the variance of the noise,  this is the variance of the data, add them together to get the total variance,
+This is the variance of the noise, this is the variance of the data, add them together to get the total variance,
 square roots the standard deviate total standard deviation.
 So it is just the inverse of the total standard deviation, which is what we have here.
 The inputs for a model should have unit variance (we have done that always) 
@@ -333,18 +328,18 @@ and we want that to be one 1.
 So the variance of the plain images plus the noise is equal to the variance of the clean images plus the variance of the noise.
 If we want that to be 1, then divide both sides by this and take the square root and that tells 
 us our multiplier has to be 1 over this.
-We have to know that the variance of two things added together is the variance of the two things added together.
+NB: The variance of two things added together is the variance of the two things added together.
 
 J: We want to do this when we looked at those sigmas that we're plotting the distribution,
-some are fairly low, you've also got somewhere the standard deviation sigma is like 40.
-The variance is high, we don't want to feed something with standard deviation 40 into our model,
-we would like it to be closer to unit variant.
+some are fairly low, others got sigma like 40.
+The variance is high, we don't want to feed something with standard deviation 40 into our model.
+We want it to be closer to unit variant.
 If we divide by roughly 40 that would scale it down, but then we also got some extra variants from our data,
-so it's like exactly 40 plus variance of the data,we want to scale back down to get unit variance.
+so it's like exactly 40 plus variance of the data, we want to scale back down to get unit variance.
 
-JH: This paper is doing what we spent weeks doing that improved every model,
-always to get mean 0 variance 1 inputs to our model and for all of our activations.
-The only other thing is include enough compute by adding enough layers and activations.
+JH: This paper is doing what we spent weeks doing that improved every model:
+1) always get mean 0 variance 1 inputs to our model and for all of our activations.
+And 2) include enough compute by adding enough layers and activations.
 Those two things seem to be all that matters.
 To make it even smoother by giving an identity path, trying to make things as smooth as as possible and as equal
 everywhere as possible.
@@ -352,7 +347,7 @@ This is what they've done for the inputs and then also for the outputs.
 For the outputs it is the same analysis to show that.
 </Appendix>
 
-Now we've got our noise input, we've got a linear version somewhere between X0 and the noise to input,
+Now we've got our noise input, we've got a linear version somewhere between X0 and the noised_input,
 we've got the scaling of the output and the scaling of the input.
 For the inputs to our model we're going to have the scaled noise, the $\sigma$ and the target,
 which is somewhere between the image and the noise.
@@ -376,17 +371,17 @@ they're going to multiply by C_out and then add $c_{skip} by noise to input.
 Here it is multiplied by C_out add noise 10.6.
 We can do noise so let's grab our sequence from the actual batch we had,
 let's calculate $C_{skip}$s here and see in for the sigmas in our minibatch.
-Let's use the model to predict the target given the diced?? input and the sigmas and then denoise it.
+Let's use the model to predict the target given the noised input and the sigmas and then denoise it.
 
-Here is our noise to input which we've already seen, and here are our predictions, which are remarkable.
-This one here we can barely see, it found it, look at the shirt there's the shirt here,
-it is finding the little thing on the front. See what it should look like.
-In cases where the segment's?? pretty high like here,
-it's saying I don't know maybe it's shoes but it could be something else.
+Here is our noised input, and here are our predictions, which are remarkable.
+This one here we can barely see, it found it, on the shirt it is finding the little thing on the front. 
+Compare to what it should look like.
+In cases where the sigmas are pretty high,
+it doesn't know, maybe shoes but it could be something else.
 It wasn't shoes but at least it's got the the bulk of the pixels and the rates.
 The 4.5 it has no idea what it is, maybe shoes maybe pants. 
 
-Another thing was a sigma of 80, which is what they do when they're doing sampling from Pure Noise.
+A sigma of 80 is used when they're doing sampling from Pure Noise.
 That is considered the Pure Noise level.
 We created some Pure Noise and denoised it just for one step, what happens is that it overlaid all the possibilities.
 We can see a pair of shoes, pair of pants, etc.
@@ -396,18 +391,18 @@ We get a sense of how from Pure Noise it starts to make a call about what this n
 
 This first step from Pure-noise to something is a bit which JH feels least convinced about in diffusion models.
 It is trying to have a good mix of all possible things.
-It feels a bit hand wavy, it works well but not sure if it's like we're getting the full range of possibilities.
+It feels a bit hand wavy, it works well, but not sure if it's like we're getting the full range of possibilities.
 Some papers are starting to say that maybe this is not the right approach.
 Later we may look at some of the ones that look at VQ models and tokenized stuff.
 Is interesting to see pictures (never seen any like this).
 
 SAMPLING
 Sampling becomes simpler.
-Much of the code in the sampling section is inspired by and some copied from Cat's K diffusion repo.
-This repo is a great generative modeling code.
-Before we talk about sampling we need to talk about what $\sigma$ we use at each reverse timestep.
+Much of the code in the sampling section is inspired by and some copied from Cat's K diffusion repo,
+which has great generative modeling code.
+Before sampling, we need to talk about what $\sigma$ we use at each reverse timestep.
 Previously we've always done something sketchy, just linearly gone down the sigmas (or the alphabars) or the t's.
-Sampling in the previous notebook we used [lens base so iron spot??] was questionable.
+Sampling in the previous notebook we used was questionable.
 At the start it was just noise, so we did not care. 
 In DDPMV3 we experimented with something that intuitively made more sense:
 For the first 100 timesteps we only run the model every 10 times, for the next 100 we run it 9 times,
@@ -493,7 +488,6 @@ We can pass in `eta` to scale that, e.g., if we scale it by half, half of it is 
 and half of it is going in the direction that we thought we should go.
 That makes it better still, again with 100 steps adding a bit of extra noise now.
 
-*************
 [Heun's method](https://en.wikipedia.org/wiki/Heun%27s_method) does something which we can pictorially see 
 [Heun's Diagram](https://en.wikipedia.org/wiki/File:Heun%27s_Method_Diagram.jpg) here, to decide where to go.
 Where are we right now, what is the direction at the current Point.
@@ -552,9 +546,8 @@ Then we found a better set of parameters which ended up simplifying things.
 Looking through this notebook the code is simple compared to all the previous ones.
 Every notebook we've done from DDPM onwards the code's got easier to understand.
 
-T: clarify like how this could exit some of the previous papers that we've looked at also like
-for example with the DDIM the deterministic approach is similar to the Euler method sample,
-The Euler ancestral is similar to the standard DDPM approach that was a stochastic approach.
+T: The DDIM the deterministic approach is similar to the Euler method sample,
+Euler ancestral is similar to the standard DDPM stochastic approach.
 
 We are at the point where we look at creating a good quality UNet from scratch.
 We will use a different data set, starting to scale things up, using a 64 by 64 pixel Imagenet subset called tinyimagenet.

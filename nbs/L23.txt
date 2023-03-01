@@ -1,0 +1,671 @@
+Lesson 23 
+Admitting a bug in notebook 23 Karras about measuring the FID.
+FID measures how similar a set of (model generated) samples are to a set of real images,
+where similarity is defined as distance between the distributions of the features in a classifier or some kind of model.
+To get FID we have to load a model, and pass it some data loaders so that it can calculate
+what the samples look like from real images.
+The problem is that the dataloader had images with pixels between -0.5 and +0.5.
+But the model was trained with pixels between -1 and 1.
+Hence the `ImageEval` class would have seen the `cmodel` (which we are getting the
+features from) as a whole bunch of unusually low contrast images.
+They wouldn't have looked like anything in the dataset, because the Fashion MNIST dataset 
+is consistently normalized (from 0 to 1 or -1 to 1, or 0-255 in the original).
+As a result the features that came out would have been "weird" not consistent, low contrast image features.
+JH added another bug on top, in the sampling didn't multiply by 2, 
+and the data that it was trained on was the same data loaders, specifically the same transform, the same noise. 
+The same transform which previously was from -0.5 to 0.5.
+So the model was trained using a restricted input space too, 
+and therefore it was spitting out things that were between -0.5 and 0.5.
+And so the FID then said that these are similar, the samples are consistently spitting out features of low contrast things,
+and the real samples were low contrast things, so those are similar, and that's how we got low numbers.
+Those numbers are wrong.
+The Keras model was appearing to be doing too much better, but actually it was not.
+After fixing that the FIDs are 5-6, and the reals FIDs are 2.5.
+To compare we were getting good results in Notebook 22 with cosine, 3-4 depending on how many steps we were doing DDIM.
+The result is that the cosine model where we scaled it accidentally to be -0.5 to 0.5, 
+and then post sampling multiplied by two (so we're not cheating like the Karras used to be),
+is working better than Karras.
+< A surprise as Karras was in theory optimally scaling things. 
+It was scaling things to unit variants, but there's nothing to say that's optimally scaling things.
+So empirically we've found accidentally a better way to scale things.
+Also the dependent variable is different, is not the Karras c_ combination.
+Our dependent variable is just the noise before it's multiplied by alphabar.
+That was the bug.>
+
+TINY IMAGENET
+Let's move on to Tiny imagenet to show an example of UNet that combines a lot of the ideas we've been looking at.
+It's going to be a super resolution, which on fashion mnist is not interesting as the maximum size is 28 by 28.
+We'd go a bigger to Tiny imagenet which is 64 by 64.
+Was difficult to find tiny imagenet data but it's still on the Stanford servers where it was originally created,
+just not linked to anywhere.
+If it disappears we will keep our forum and website up to date with other places to find it.
+We can grab the URL from there and unpack it so.
+`shutil` is a library inside the python standard library and it has unpack archives which can handle zip files
+and it's going to put it in the `data` directory.
+
+Lets try doing things kind of manual way just to see how that looks like.
+Often this is the easiest way to do, as there is a well defined set of steps.
+Step one is to create a dataset, i.e., something that has a length and that we can index into.
+We don't have to inherit from anything, just have to define `__len__` and `__getitem__`.
+Broadly speaking, in Python we generally don't have to inherit from things,
+we just have to provide the methods that are expected.
+The dataset is in a directory called tiny-imagenet-200.
+There are a `train` and a `val` directories for the training and validation set.
+Each directory has sub-directories for each category, e.g., `n04560804`, which has 
+`images` in a separate folder. 
+
+We start with grabbing all of the files in path slash train or the image files so
+the python standard library has a blob function which searches recursively
+you're fast too for everything that matches this uh well
+this specification so this specification is path slash.jpg 
+
+And then this ** here (I don't know why we need to do it twice it's a bit weird) we also
+need that to be recursive so we both have to say `recursive=True` here and also put `**` before
+the slash here.
+That is going to give us a list of all files inside PATH train.
+If we index into that training data set with zero that we'll
+call get item passing an i of zero and so we will then return a tuple:
+one is the thing in self.files[i] which is this file and then the label for it which is the parents parents name.
+
+When we index into `tds` it returns a tuple of 2 strings: the first is the full path of the image file,
+and the second is the name of the wordnet category (codes that indicate English concepts.
+One of the reasons we use this data set is to force us to do more data processing.
+Weirdly in the validation set, in `tiny-imagenet-200/Val` they are not in subdirectories organized by
+label, instead there is a separate `val_annotations.txt` file, and 
+in it for each file name what category is it.
+It also has the bounding box of whereabouts, which we're not going to use today.
+JH decided to create a dictionary that would tell us for each file what category is it in.
+We want to create a generator comprehension that will stream out the results.
+We're going to go through each line in this file and we're going to split on Tab.
+We grab the first two and if we  pass a list of lists, or list of tuples to `dict()` 
+it creates a dictionary using these pairs as key values.
+
+We can click tab dict to type Open brackets and then hit shift tab a couple of times
+and it'll show you the various options.
+We are doing dict iterable because the generator is
+iterable and it is as if we created a dictionary and then gone for k,v in iterable dk=v.
+
+We need a data set that works just like the `tinyDS` dataset but
+the get_items are going to label things differently.
+We inherit from tinyDS  so we don't need to do `__init__` nor `__len__` again,
+and then redefine `__getitem__` again it's going to turn the `self.files`, 
+but this time for the label we will look up in the annotations dictionary `anno` using
+the name of the file.
+We check that the label and the length work.
+
+Lets define a class that lets us transform any dataset.
+To the class `TfmDS` we can pass a dataset and a transformation for the `x` (independent variable) and for the `y`.
+Both default to `noop` so it just doesn't change it.
+For `TfmDS` the length is just the length of the original dataset.
+But when we call `__getitem__` it'll grab the tuple from the dataset we passed in 
+and it will return that tuple but with `tfmx(x)` and `tfmy(y)` applied to it.
+We don't like working with the `n030` labels, but the dataset has a wordnet IDs file `wnids.txt` in it.
+It is a list of all of the wordnet IDs that they have images for.
+(we could have got this by by listing the parent directory, it would have told us all the IDS).
+There are 200 categories, useful because we're going to change n030... into ints,
+by enumerate so that gives us the index, and the value for everything in the list.
+Those are going to be the keys `k` and values `v` but we invert it `v:k` to become value column key.
+and that's what `str2id` would be.
+We have a dictionary comprehension, because it's got curly brackets and a colon.
+(We could have used the above `dict()` way to get a dictionary comprehension instead.
+
+Grabbed one batch of data and grabbed its mean and standard deviation,
+copied and pasted them here for normalizing.
+`tfmx(x)` is going to read the image as RGB, that is going to force it to be 3 channels 
+(because some of them are only one channel) divided by 255, 
+so it'll be between 0 and 1 and then we normalize.
+`tfmy(y)` for the `y`'s use str2id to get the ID and just use that as the tensor.
+Doing it manually is straightforward, now we just pass those to our `TfmDS` 
+our transformed data set.
+We can check that even though `yi` is a tensor, we can look it up to get its label value.
+`xi` is an image tensor with three channels: Channel by height by width.
+For showing images it is nice to denormalize them, and then we
+show the image that we just grabbed it's a water jug.
+
+Now we can create a dataloader for our training set, it's got the transformed training dataset `tfm_tds`,
+and pass in a batch size `bs`, this one has to be shuffled `shuffle=True`.
+Not sure why  `num_workers=0`, generally 8 is OK if you've got at least eight cores.
+We can now grab an X batch `xb` and a Y batch `yb` 
+and take a look at a denormalized image from `xb[0]`: a cat.
+Looking better than fashion MNIST.
+`words.txt` is a list of the entire wordnet hierarchy.
+The top of the hierarchy is entity, and one of the entity types is a physical entity 
+or an abstract entity, entities can be things, and so forth.
+`words.txt` is a big file. 
+We go through each item of that file and again split on tabs `\t`, 
+to give us the wordnetID and then the name of it.
+Now we can go through all of those (they call them synsets) 
+and if the key is in our list of the 200, we want to keep it.
+We don't want multi-part names, like "causal agent, cores, ..."
+Causal agency, the first one, generally seems to be the most normal, so we 
+split on comma and grab the first one.
+
+We then go through our y batch and just turn each of those numbers into strings 
+and then look at each of those up in our synsets and join them up
+and then use those as titles to see our Egyptian cat and our Cliff our guacamole
+it's a monarch butterfly and so forth.
+This is going to be tricky eg a "cliff" versus a "cliff dwelling" could be quite complicated.
+They intentionally picked 100 of the categories from the normal Imagenet, 
+and then picked 100 that are designed to be particularly difficult.
+
+
+We can create our dataloaders `dls`.
+We defined `get_dls()` in an earlier lesson which turns each dataset into a dataloader, 
+and the train `tds` gets shuffled and the valid `vds` doesn't, use `num_workers`, etc.
+Then we want to add our data augmentation `tfm_batch`.
+Training a tiny imagenet model is harder than Fashion mnist.
+Overfitting was a real challenge, guess it's because 64 by 64 isn't that many pixels.
+JH found the needed for data augmentation to make progress.
+A common data augmentation is "random resize crop" which is basically to pick one area inside
+and zoom into it and make that the image.
+But for such low resolution images that tends to work poorly,
+because it's going to introduce a lot of blurring artifacts.
+For small images it's better to add a bit of padding around them,
+and then randomly pick a 64 by 64 area from that padded area, so it's going to shift them slightly.
+It is not a lot of augmentation but it's something.
+Then we will do our random horizontal flips, and then we'll use that random arrays thing that we created earlier.
+
+We can define a transform batch function `tfm_batch()` with the same basic idea.
+Now we can use that `BatchTransformCB` callback using `tfm_batch()` passing in those transforms.
+Capital `T` is TorchVisiontransforms. 
+As these are all nn.modules we can pass them to nn.sequential to have each of them called
+one at a time in a row.
+This is just function composition.
+We got a fastcore.compose which basically just says for f in funks x = f(x, *args, *kwargs).
+Is there a torch Vision compose might be the old way to do it.
+This is considered the better way now because it's kind of scriptable
+
+We can now create a model as usual.
+We copied the get model with Dropout `get_dropmodel()` from the earlier fashion mnist. 
+Started with a kernel size five convolution, and then a bunch of `ResBlock`s.
+All what we have seen before.
+We can take a look in this case, as is often the case we accidentally end up with "no random erasing"...
+If so, let's just run it again.
+We can see it there's a very small border in a bit of random erasing.
+All of the batch is being transformed or augmented in the same way, which is OK okay, it's certainly faster.
+It can be a problem if we have one batch that has lots of augmentation being done to it,
+and it could be hard to recognize and that could cause the loss to be a lot in that batch.
+If we're training for ages that could jump out of the smooth part of the loss surface.
+That is the downside of this, so it's not always a good idea to do augmentation at batch level,
+but it can certainly speed things up a lot if we  don't have heaps of CPUs.
+
+We can use the `summary` we created there's our model.
+Because we're doubling the number of channels as we're decreasing the grid size,
+our number of Megaflops per layer is constant.
+That's a good sign that we're using compute throughout.
+Then we can train it with AdamW mixed precision and our augmentations.
+We did the learning rate finder and trained it for 25 epochs, and got nearly 60%.
+It took a while to get close to 60, and the training sets already up to 91, 
+so we're on the verge of overfitting.
+
+[PAPERS with CODE]
+To get a sense of how much better could we get, look at papers with code,
+a site that shows papers with their code and the results they got.
+This is the the [Image Classification on Tiny Imagenet](https://paperswithcode.com/sota/image-classification-on-tiny-imagenet-1).
+At first it was disheartened to see 90+ plus results.
+But then noticed that the checkmarks represent "extra training data", i.e.,
+these are retrained models that are fine-tuned on Tiny ImageNet, so that is much easier ("a total cheat").
+Looking closely at the top one, and it is also using pre-trained data (the table is incorrect).
+The first ones we can clearly replicate and make sense of is "Decoupling Mixup for Data-Efficient Learning", which is 72.39%.
+Wanted to get a sense over how much work is there to get from 60 to 70, and how good is this.
+The paper has a new type of mix-up data augmentation, they compare "normal" mix-up and a special kind of mix-up.
+On a resnet18 they're getting 63-65 with various types of mixup,
+and 64-65 for their special one, and if they use much bigger models than we're using they can get up to 66.
+So the classifier we made is not bad, but there is room to improve it.
+JH always have to try to do better...
+[/PAPERS with CODE]
+
+This is a good opportunity to learn about a trick that is used in real resnets.
+In a real Resnet we don't just say how many filters or channels or activations per layer,
+and then just do a straight to con each time.
+Instead we can also say the number of ResBlocks per down sampling layer, `nbks`.
+This would say do 3 ResBlocks and it'll then down sample (or downsample and then do 3 ResBlocks),
+that will do 3 ResBlocks the first or the last of which is a downsample.
+And then two ResBlocks with a downsample, then 2 ResBlocks with a downsample.
+This `nbks` has a total of five downsamples, but it's got nine ResBlocks, it's nearly twice as deep.
+The way we do that is we replace the places where it was saying `ResBlock` with `res_blocks`.
+`res_blocks` is a sequential which goes through the number of blocks and creates a `ResBlock`.
+We can do it a couple of ways.
+In this case, if it's the last one then make it stride=2, otherwise stride=1.
+So it's going to be down sampling at the end of each set of ResBlocks.
+The only thing changed in `get_dropmodel` was `ResBlock` to `res_blocks` and passed in the number of blocks `nbks`.
+
+
+The number of Megaflops is now 710 which is more than double.
+So it should have more opportunity to learn, which also could be more opportunity to overfit.
+Wwe do our LRfind, and did 25 epochs and didn't add more augmentation, and got up to nearly 62. 
+That was a good improvement, and interestingly it's not overfitting more, if anything less,
+There is some ability to actually learn, which is slowing it down, so lets train it for longer.
+
+JH decided to add more augmentation, using "Trivialaugment", an approach that should be better known.
+[TrivialAugment: Tuning-free Yet State-of-the-Art Data Augmentation](https://arxiv.org/pdf/2103.10158.pdf) 
+from Frank Hutter, who consistently creates practical useful improvements, 
+with less of the nonsense that we often see from huge well-funded labs.
+Is a bit of a reaction to previous approaches e.g.,  Auto Augment (AA), Rand Augment (RA), 
+(from Google brain?) which used many TPU hours to optimize how every image, how each
+set of images is augmented.
+TrivialAugment said lets randomly pick a different augmentation for each image.
+The Algorithm 1 procedure is pick an augmentation, pick an amount, do it. 
+Feels like they're trying to make a point writing this algorithm here.
+
+They found this is at least as good or often better than the resource intensive ones, which also 
+require a different version for every dataset, and describe this as a "tuning-free".
+[TrivialAugment is built into Pytorch](https://pytorch.org/vision/main/generated/torchvision.transforms.TrivialAugmentWide.html)
+show some examples.
+We can create our own, but JH found that doing this at a batch level worked poorly,
+perhaps because sometimes it will pick a really challenging augmentation,
+and it will mess up the loss function.
+If every single image in the batch is like that, it'll shoot it off into the distant parts of the of the weight area.
+This is a good excuse to show how to do augmentations on a per item.
+
+Some of them require having a PIL image, Python Imaging Library image, not a tensor.
+So we have to import image from PIL and we have to change our `tfmx(x)` now,
+and we're going to do the augmentations in there when we pass `aug=True` for the training set (not for the validation set).
+`Image.open` creates a PIL image object.
+Then if we want augmentations then we call `aug_tfmx(x)`, and then `TF.to_tensor(X) to convert it into a tensor.
+Then we can normalize it, using TorchVision's normalize `norm_tfm(x)` (miniai's is fine but this one works well).
+If we want augmentation then do the round arrays, which was designed to use zero one distributed gaussian noise.
+We want that to happen after normalization so that's why we do it in this order.
+
+Now we don't need to use the `batch_tfm`? thing, we're doing it all directly in the dataset.
+We can do data augmentation in very simple ways without almost any framework help.
+Nothing's coming from a framework, it's just the TfmDS we defined.
+Now we just pass that into our dataloaders get `dls` and we don't need any augmentation callback.
+
+We keep improving things by doing pre-activation Resnets.
+In the original 13_resnet notebook, we had a `_conv_block` which consists of two convolutions in a row.
+The second one has no activation.
+conv?? is first a `conv2D`, then optionally we do a normalization, and then optionally we do our activation function.
+So we end up and then the second of those convolusions has `act=none`.
+So `self.convs` is: convolution Norm activation convolution Norm.
+And then `self.idconv()` is the identity path, does nothing at all if there's no down sampling or no change of channels.
+Then we apply the final activation function `self.act(..)` to the whole thing.
+That was how the original ResBlock was designed. 
+A slightly later paper "Identity Mappings in Deep Residual Networks", 
+by Kaiming He, the same author of the Resnet paper, diagram on page 2 on the left,
+has conv Norm conv Norm ad value.
+He pointed out that the (a) original is not good, because the RELU is being applied to the addition, so there isn't an identity path.
+K. He proposed reordering things in (b) Proposed to go Norm RELU conv, Norm RELU conv.
+This is called a preact or pre-activation ResBlock.
+That means we had to redefine `conv` to do `norm` then `act` and then `conv2d`.
+So the sequential now has the activation `act=act` in both `conv`s.
+There's no activation happening in the ResBlock because it's all happening in the `conv`.
+
+`get_dropmodel()` is the same except we need to have an activation and a batch Norm after all those blocks because
+previously it finished with a normal activation now it starts with them.
+So we have to put these at the end.
+It also means we can't start with a ResBlock anymore, because if we started with a ResBlock then 
+it would have an activation function at the start which would throw away half of the data (a bad idea).
+We've got to be careful with these details.
+
+Now we can see that each image is getting its own augmentation.
+One has been sheared (looks like it's a door), another one has been moved.
+Another one sheared, they've got different amounts of rand arrays on them.
+
+Lets change training to 50 epochs and that got us to 65 percent which is nearly as good as the normal mix-up,
+were getting even on a resnet50s.
+They trained all these for 400 epochs, so what would happen if we trained it a bit longer say 200 epochs, and we got 67.5%,
+which is better than any of their non-special Mix-Ups.
+We got state-of-the-art results.
+TODO?: Used their special mix-up. See if we can match their results there.
+We've built all this from scratch, but we didn't do the data augmentation from scratch because it's not very interesting.
+
+Experiments with pre-activation.
+Tried to use it everywhere, but it was worse for fashion MNIST and worse for less data augmentation.
+The pre-activation idea was introduced to train deeper models, there's a more pure identity path.
+That "more pure" identity path should let the gradients flow through it more easily, 
+giving a smoother loss surface.
+Hence we don't see benefits on shallower (smaller) models.
+Smaller models likely have a "less bumpy" surface, fewer dimensions to be bumpy on, and 
+they're less deep, so there's less room for gradients to explode.
+So they're not as sensitive, that is why they don't necessarily help.
+Not clear why they were worse and they were consistently worse, curious to find out.
+Our experiments on some DL fundamentals and foundationals, we discover things that have not been noticed or written about.
+Is more experimental research to do experiments and then figure out what's going on.
+Many researchers go in the opposite direction start with theoretical assumptions and then test them.
+Maybe more successful folks build stuff that actually get used are more experimental.
+
+notebook 25 superres
+Copied a few things from previous notebook 24_, some transforms and our datasets
+We've got 2 datasets, the goal is to do super resolution not classification.
+The independent variable will be scaled down to a 32 by 32 pixel image, and the dependent variable will be the original image.
+To do random crop within a padded image and random flips, both the independent and the dependent variable need to have had 
+the same random cropping in exactly the same flipping, otherwise we can't say this is how we do superres 
+to go from 32 by 32 to the 64 by 64.
+For an image reconstruction task it's important to ensure that the augmentation is done in the same way 
+on both the independent and the dependent variables.
+That is why we've put it into our dataset.
+People often get confused about this and don't know how to do it.
+This way we put it straight in the dataset and it doesn't require any framework.
+JH then added random erasing just to the training set, to make the superresolution task a bit more difficult.
+It means sometimes it doesn't just do super resolution but it also has to replace some of the deleted pixels with proper pixels.
+This gives it a little bit more to do, which can be quite helpful.
+It is a data augmentation technique and also something to give it an opportunity to learn what the pictures really look like.
+
+these are going to do the padding random cropping and flipping,
+the training set will also add random erasing and then we create data loaders `dls` from those.
+T: would it make sense to use the trivial augment here?
+JH: Only if you found that overfitting was a problem and if you did do it,
+you would do it to both independent and dependent variables.
+Here we can see an example, the independent variables, in this case all of them actually has some random erase,
+the dependent doesn't so it has to figure out how to replace that with that.
+We can also see that this is very blocky and this is less blocky, because this has been gone down to 32 by 32
+pixels and this one's still at the 64 by 64. 
+Once we go down that far, the cat has lost its eyes entirely, so it's going to be quite challenging.
+Super resolution is a good task to get a model to learn what pictures look like, 
+because it has to figure out how to draw an eye, how to draw cats whiskers, etc. 
+Jono: The data sets are simpler because we don't have to load the labels, so there's no difference between 
+the train and the validation.
+It's just finding all the images, because the "label", ie the dependent variable is just the picture.
+
+Because `TfmDS` has a `tfmx` which is only applied to the independent variable `x`,
+it has applied to it (a) `resize` to 32 by 32, and then (b) interpolate.
+That actually ends up with a 64 by 64 image, but the pixels in that image are "doubled up".
+It's still doing super resolution, but it's not going from 32 by 32 to 64 by 64.
+It is going from the 64 by 64 where all of the pixels are two by two pixels, which is a bit easier.
+We could create a UNet that goes from 32 to 64.
+But if you we have the input and output image of the same size it makes the code simpler.
+JH originally started doing it without the interpolate, and then decided it was confusing.
+There's no reason not to do it this way.
+
+If it does a good job of this, we could pass 64 by 64 images into it, and it might turn them into 128 by 128 images.
+Particularly if we trained it on a few different resolutions, we would expect it to be good at middle resizing 
+things to a bunch of different resolutions.
+We can call it multiple times.
+In previous courses we trained bigger ones for longer with larger images and they actually do.
+Not only they do super resolution but they often make the images look better because the pixels it fills in 
+what that image looks like on average, which tends to average out imperfections, and improve image quality.
+
+Let's consider first the "dumb way" to do it (we've seen dumb way to do things before),
+which isn't autoencoder, so we go in with low expectations, because we've done an autoencoder before,
+and it was so bad it inspired us to create the Learner (back in Notebook 8).
+We're going to have a model which looks a lot like previous models.
+It starts with a ResBlock `ks=5`, then a bunch of ResBlocks of `stride=2` but then we're going to have an equal
+number of `up_block`s.
+The `up_block` is going to first do an `UpsamplingNearest2D` which is actually identical to this (above).
+It is going to just double all the pixels, and then we're going to pass that through the Resblock.
+It's basically a ResBlock with a stride of a half, undoing a `stride=2`, it's up-sampling rather than down-sampling.
+Then we'll have an extra ResBlock at the end to get it down to three channels which is what we need.
+
+We can do our learning rate finder, train it briefly for 5 epochs.
+T: this model is trying to squeeze the image that we start out into a small representation,
+and then bring that smaller representation back up to then the full super resolution.
+We could have done it without any `stride=2`, with just a bunch of `stride=1` layers.
+There are a few reasons not to do it that way: one is that the computation requirements are high
+because the convolution has to scan over the image, at 64 by 64 that's a lot of scanning.
+Another reason is that we are never kind of forcing it to learn higher level abstractions 
+by recognizing how to use more channels on a smaller grid size to represent it.
+It is like the same reason that in classifiers we don't leave it at `stride=1` the whole time,
+as we would end up with something that's inefficient and not as good.
+
+The loss goes down, the loss function we use is MSE, how similar is each pixel to the pixel it's meant to be.
+
+We call `capture_preds` to get their predictions `p`, the probabilities targets `t`, and the inputs `inp`.
+The input images are low resolution and the predicted images are terrible.
+It is like the problem we had with our earlier Autoencoder, it's difficult to go from a two by two 
+or 4 by 4 image into a 64 by 64 image.
+We are asking it to do something that's really challenging, that would require a much bigger model trained for a much
+longer amount of time.
+It's possible and latent diffusion has a model that does that, but in our case there's no need to make it so complicated.
+
+UNets paper
+We can do something easier, which is to define a UNet.
+UNets were originally developed in 2015 for Medical Imaging, but they've been used widely since, including in stable diffusion.
+The original paper "U-net: Convolutional Networks for Biomedical Image Segmentation".
+In Fig 1., there are down sampling and up-sampling path. 
+Blue boxes represent multi-channel feature maps, white boxes represent copied feature maps.
+They started with 572x572x1 images and took them down to 284 by 284 by 128, and then down to 140 by 140 by
+256, then 68 by 68 by 512, 32 by 32 by 1024.
+The Up-sampling path we've seen before. 
+Originally they used convs (no ResNets or res blocks).
+The "trick" is the "copy and crop" arrows.
+In the Up-sampling we've got a a 512 Channel box, then put it through a conv to make it into a 256 Channel box.
+Then we copy across the activations from yhe left side.
+(They do things in a slightly weird way, where they're down sampling, they had 136x136 on the left (down-sampling), 
+and on the up-sampling side they had 104 by 104.
+So they crop out the center bit, a weird way they did it, they weren't padding.
+Nowadays we don't have to worry about that that cropping, we just copy over these activations, and then either concatenate or add.
+In the paper they concatenating the white box and the blue box together.
+They went from a 52 by 52 by 512 to a 104 by 104 by 256.
+Then they had another left side blue box copied and then put the two together to get a 104 by 104 by 512. 
+Half of these activations are from the up sampling and half are from the earlier down sampling.
+When we get back up to the top we've got 392x392 box. 
+Then we're copying across a box that is just 2 convolutions away from the original image.
+
+For super resolution, for example, we want it to look a lot like the original image.
+In this case we have a copy of something very much like the original image, 
+that we can include in these final convolutions.
+Ditto on the more downsample versions we can use on the up-sampling path.
+That is how the UNets Work.
+
+J: Many people tend to just add, the outputs from the down layer are the same shapes as the inputs for the corresponding block,
+and then they just kind of add.
+JH: Particularly for super resolution adding might make more sense than concatenating, 
+because is saying "this little 2x2 bit is basically the right pixel but it just have to be slightly modified on the edges".
+J: Is like boosting where a lot of information from the original image is being passed all the way across
+at that highest skip connection but then the rest of the network can be producing an update to that
+rather than having to recreate the whole image.
+JH: It's like a Resnet but that means to skip connections, but the skip connections are 
+jumping from the start to the end and a bit after the start to a bit before the end.
+It could be worse if the last up-samling convs at the end are incapable of undoing what the first downsampling convs did.
+Maybe there should also be a connection from the input image to the output, 
+and maybe a few more convs after that.
+Another thing to consider is that they've only got 2 columns at the bottom.
+At this point we have the benefit of only being a 28 by 28, so we could do more computation at this point.
+There are a couple of things that sometimes people will consider, maybe not enough.
+
+UNet (notebook 25)
+In the UNet here the down sampling path is a `nn.ModuleList` of ResBlocks.
+A `ModeluList` is like a Sequential except it doesn't do anything.
+In the `forward` we have to go through the down path and `x=l(x)` each time.
+The up path `self.up` is before, a bunch of `up_blocks`.
+Then the final one is going to have to go to 3 channels.
+In `forward`, since we're going to be copying the "copy and crop" gray arrows, 
+we have to save them during the down sampling path.
+We're going to save them in a list called `layers`.
+JH decided to also save the very first input `layers.append(x)`. 
+Then put it through the first ResBlock `self.start(x)`, and then go through each in the downward path `dn`.
+For each layer in the downward path, append the activations, 
+so as we go through each one we save them for later and then call the layer.
+
+We got `n=len(layers)` that we've stored away.
+Now we're going to go through the up sampling path, and call each one.
+But before we do, unless this is the first layer (there's nothing to copy), 
+let's just add the saved activations and then call the layer.
+Then at the end we'll add back the very first layer, and then pass it through the very fine last block.
+`end(x+layers[0]
+Maybe that last one should be concatenated I'm not sure.
+
+Next, how to initialize this, so that when it's untrained, the output of the model would be identical to the input,
+a reasonable starting point for what does this look like following super resolution.
+Defined a `zero_wgts()` which zeros out the weights and biases of a layer.
+Created the model, and then let's look at the very end of the up sampling path, and call that the `last_res`.
+Let's zero out the very last convolutions and also the ID connection.
+That means that whatever it does for all this, at the very end it's going to have nothing in `x`, 
+`x` will be zero, which means that `TinyUnet` returns `layers[0]. 
+We also want to make sure that `self.end()` doesn't change anything, so we zero out the weights there `model.end.convs[-1][-1]`
+That's probably not right, should have set those to an Identity Matrix (JH will do that later).
+But at least it is something that would be very easy for it.
+
+Jonno Q: Re: zero_wgts, many multiply by `1e-3` or `1e-4` to make the weights small but not 0.
+Having everything set to 0 fires off warnings that maybe this is going to be balanced on some saddle point,
+or it's not going to have any signal to work with.
+JH: don't think it's an issue, it comes from PhD supervisors who come from an era when they were doing linear regression with one layer, 
+and in those cases, if all the weights are the same, then no learning can happen because every weight update is identical.
+But in this case all the previous weights are different so they all have different gradients, nothing to worry about.
+Multiplying by a small number would work too, it's not a problem.
+JH has a natural inclination to not want to set them to zeros because of years of being told not to... :)
+
+We do train, previously our loss even after five epochs was .207 and in this case our loss after one epoch is .086,
+so it's obviously easier and we end up at .073.
+Lets look at the inputs and the outputs, so it's better now. 
+
+Sometimes a little oversmooth, the kid's eyes got proper pupils.
+It's definitely not recreated the original, but given limited compute and limited data, is not bad.
+For the koala it should have done a better job on the eyes.
+When we use mean squared error MSE as the  loss function on these kinds of models, we tend to get blurry results.
+If the model is not sure what to do, it will predict kind of the average.
+
+A good way to fix that is to use perceptual loss, (similar to FID).
+We can look at some intermediate layer of a pre-trained model, and try to ensure that the output images have the same features as the real images.
+Here, say we went midway through a Resnet, it ought to be saying, e.g., "there should be an eye here".
+And in this case this would not represent an eye very well so that should give it useful feedback to improve how it draws an eye here.
+To do perceptual loss we need a classifier model.
+So JH used the little 25 epoch classifier. 
+Grab a batch from a validation set and then we can just try it out by calling the classifier model `cmodel`.
+Here doing it in fp16 to keep memory use down.
+`.half` may not be necessary since we've got `autocast`.
+This is the same code we had before for the synsets, and here are the images showing the predictions.
+Some of them are a bit weird, Koalas are fine, wouldn't have picked this as a parking meter or bow tie.
+The predictions are not good, trolley bus looks right, "neck brace" and "basketball", 
+"Labrador Retriever", "tractor" , "centipedes", "mushrooms", "punching bags" all right.
+Thr classifier is okay but not amazing, about .60 accuracy.
+The important thing it's got enough features to be able to do an okay job.
+The model was simple, just a bunch of 5 resBlocks, and then at the end we've got our AvgPool2d, Flatten, Dropout, Linear, Batchnorm.
+
+To keep things simple we're just going to grab the end of the (3) ResBlock.
+A simple way to do that is just go from range 4 to the end of the model, and delete those layers.
+If we do that and then look at the model again, we now have 0 1 2 3, a model that is going to return the activations after the fourth ResBlock.
+For perceptual loss we can pick a couple of different places, there's various ways to do it.
+This is the simplest, didn't have to use hooks, just call `cmodel`.
+To see what this looks like, using mixed Precision, we grab the y batch `yb` as before,
+put it through the classifier `cmodel`, and this is now going to give us those intermediate level features.
+The shape of the features is batch size 1024 by the number of channels of that layer 256, by the height 8 and width 8 of that layer.
+
+Lets check if this is looking reasonable, expect that these features `feat` from the actual `y` should be similar to if use our model.
+If we took that model that we trained, we would hope that the features were at least of the same sign from the result of the model
+than they are in the real images.
+Comparing that they are generally the same sign.
+Just little checks along the way...also look at the MSE loss along the way.
+There's no need to keep all those, was just to identify ahead of time if there are problems.
+Now we can define a loss function `cob_loss`, which is the MSE loss, as before, between the input `inp` and the target `tgt`, 
+(being passed in) plus `feat_loss/10`, where `feat_loss` is the MSE loss between the features we get from the `cmodel`
+and the features we get from the actual target image `tgt_feat`.
+The target image `tgt` we do not modify, so we use `no_grad`.
+But we do want to be able to modify the thing that's generating the input at the model we're trying to optimize,
+so we do have gradient for that `inp_feat = cmodel(inp).float()`.
+We are calling the classifier model `cmodel` onece on the target `tgt` and onece on the input `inp`.
+Those are giving features that we add together.
+But they're not similar numerically, they're very different scales.
+We wouldn't want it to focus entirely on one or the other.
+We ran it for an epoch or two, checked what the losses will look like.
+Noticed that the feature loss was about 10 times bigger, so the "hacky way" was to divide it by 10. 
+Still, that detail doesn't tend to matter very much.
+Nothing wrong with doing in a hacky way, but there are papers which suggest more elegant ways to handle it.
+That isn't a bad idea to save time when doing a lot of messing around with this.
+
+J: The new vae decoder from stability AI for the stable diffusion Auto encoder trained some with just MSE and 
+error and some with MSE combined with the perceptual loss, and had a scaling factor of 0.1.
+
+For `get_unet` we do the same as before in terms of initializing it.
+We do LRfind.
+Run it for 20 epochs.
+The loss is not comparable because this loss now incorporates the perceptual loss. 
+This is a challenge to see if is it better or not.
+We take a look and compare.
+We should copy over previous models images so we can visually compare.
+There's the inputs, outputs, and he's got pupils now which he didn't before, Koala doesn't have eyeballs.. but it is more in focus.
+Some of them are going to be flipped because it is copied from earlier.
+There is clipping and cropping, so they won't be identical.
+The background before was all blurred, now it's got texture, and the real has texture.
+Clearly the perceptual losses improved quality significantly.
+
+J: There is no metric to use now,  because if you did MSE the one that's trained would probably do better, but visually it looks worse.
+If we use FID it is based on the features of the pre-trained network.
+So we are back to just humans looking and evaluating.
+Jason Antic(sp?) career of image restoration, super resolution and colorization,
+still looking at images to decide whether something is better.
+JH: A PhD student yelled at me on Twitter for saying "look at this cool thing our student made, they look better", 
+and he "there's rigorous ways to measure these things, this is not rigorous".
+
+Talking of cheating let's do it. 
+FastAI favorite trick is gradually unfreezing pre-trained Networks.
+It seems a bit funny to initialize all of this down path randomly, because we already have a model, `innettiny-custom-25`,
+that is capable of doing something useful on Tiny Imagenet images. 
+What if we took our UNet, and for the `model.start` (which is the ResBlock right at the front),
+use the actual weights of the pre-trained model.
+Then for each of the bits in the down sampling path, use the actual weights from that too.
+This is a useful way to understand how we can copy over weights.
+Any part of a nn.module is itself an nn.module, which has a `state_dict` which we can call `load_state_dict` to put it somewhere.
+Here is going to fill the whole ResBlock called `model.start` with the whole `ResBlock` which is `pmodel[0]`.
+Here's how we can copy across, starting one and then all the down blocks are going to have the rest of it.
+Hence rather than having random weights we're going to have all the weights from a pre-trined model.
+Since these weights are good at doing something (they're not good at doing super resolution), 
+lets assume that they're good at doing super resolution) so turn off `requires_grad`.
+If we now train it's not going to update any of the parameters in the down block.
+(I guess I should have actually done model.start requires_grad too).
+This is the classic fine tune approach from FastAI. 
+
+We do one epoch of just the upsampling path and that gets us to a loss of .255. 
+Our loss function hasn't changed so that's comparable to the previous one Epoch .385. 
+After one Epoch with frozen weights for the downpath we've beaten the earlier 20 epochs..
+This is in a sense cheating but in a sense it's not.
+It's cheating because the thing we're trying to do is to generate for the perceptual loss intermediate layer activations,
+which are the same as the `inettiny-custom-25`.
+We are using that to create intermediate layer activations, obviously that's going to work.
+But why is it okay "to be cheating"?
+Because that is what we want to be able to do super resolution, we need something that can, eg recognize there's an eye.
+We already have something to know that "there's an eye there".
+Interestingly `inettiny-custom-25` trained more quickly than the earlier 20 epochs model.
+And it is better at super resolution, even though it wasn't trained to do super resolution, 
+"because the signal is a simple signal to use".
+We do that and then we can set `requires_grad_(True)` again.
+
+The idea is that when we have a bunch of random weights (upsampling path),
+and a bunch of pre-trained weights (down sampling path), 
+don't start fine-tuning the whole thing, because at the start it is going to be "crap".
+Just train the random weights for at least an epoch, and then set everything to unfrozen,
+and then we'll do 20 epochs on the whole thing.
+Then we go from 255 to 249, 207, 198 so it's improved a lot.
+
+T: Using these weights and compare to the perceptual loss which is looking at the up sample data or the super resolution image.
+When we're incorporating the weights for the downside path.
+JH: if you have zeros in the upsampling path that it's going to be the same, so it is very easy for it to get the correct activations 
+in the up-sampling path.
+It is a bit weird because it goes all the way back to the top, creates the image and then goes into the `cmodel`, the classifier again.
+I think it's going to create the same activations.
+It i's a bit confusing and weird.
+It is not cheating but it's an easier problem to solve.
+Let's get our results again: looking good, the kid, the car reasonable.
+Still don't have eyes for the Koala, but the background textures look better, the candy store looks less smoother, medicine looks better.
+
+We can get better still. 
+This is not part of the original UNet.
+Making better models is often about where can we squeeze in more computation to give it opportunities to do things.
+Nothing says that this down sampling "copy and crop" arrow is exactly the right one we need here.
+The same 136x256 box on the left is being used for two things: one is the conv at the end of the arrow, 
+and one is the maxpool 2x2 to get the one below it. 
+Those are two different things, so it is having to learn to squeeze both purposes into one box..
+Idea: lets put some ResBlocks in the cross connections or cross convs.
+A `cross_conv` is going to be just a ResBlock followed by a conv.
+
+Copied and pasted the TinyUnet, but now in addition to the "downs" also the crosses are `cross_convs`.
+Rather than just adding the layer I added the `cross_conv` applied to the layer. 
+(Really should have added a cross conv for the `layers[0]` at the end... which is probably the one that wants it the most. (another time)
+We can compare loss functions earlier one was .198.
+Everything else is the same, the down-sampling is the same so we can still copy in the `state_dict`, `requires_grad`, and it's better .189.
+These are hard improvements to make, notice it's got an eye.
+At this point it is difficult to see whether it's an improvement or not, but there's a bit of an eye on the koala, so it's encouraging.
+That was superres.
+
+XXXXXXXXXXXXXXXX
+We built a UNet, and we did super resolution with it and it looks good.
+Exercises for people to do:
+1. Segmentation: Create a UNet for segmentation, to learn about segmentation. 
+2. Style transfer: set up a loss function to define a UNet that learns to create images, e.g., that look like Van Gogh.
+It's a different approach
+J: it's tricky, when I was playing with that it almost helped to not have the skip connections.
+at the highest resolutions otherwise it just really wants to copy the input and modify it slightly 
+JH: interesting maybe would be better there too. 
+3. colorization is nice because the transform is just a gray scale and back
+There are all kinds of "decrepification" we could do.
+To keep it a bit more simple, rather than doing the first 2 lines of `tfmx`, we could just turn it into black and white.
+Or we could delete the center every time to create something that learns how to fill in.
+4. delete the left hand side, and that way that would leave then something that you can give it a photo 
+and it'll invent a little bit more to the left.
+5. Keep running it to generator panorama.
+6. save it as a highly compressed jpeg, then it would learn to remove jpeg artifacts.
+Then old photos saved with crappy jpeg compression we could bring them back to life.
+7. Watermark removal. Use PIL to draw watermarks text whatever over the top.
+Useful for Radiology images that sometimes have personally identifiable information written which it can learn to delete it.
+8. Make superres better, eg try it on full Imagenet if you got lots of hard drive space.
